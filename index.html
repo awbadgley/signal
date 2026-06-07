@@ -670,9 +670,104 @@
       border-color: rgba(0,255,204,0.15);
       box-shadow: inset 0 0 12px rgba(0,0,0,0.8);
     }
+
+    /* ── Starfield canvas ────────────────────────── */
+    #starfield {
+      position:fixed; inset:0;
+      width:100%; height:100%;
+      z-index:0; pointer-events:none;
+    }
+    #cabinet { position:relative; z-index:1; }
+
+    /* ── 3D raised step buttons ──────────────────── */
+    .step {
+      box-shadow:
+        inset 0 2px 4px rgba(0,0,0,0.6),
+        inset 0 -1px 1px rgba(255,255,255,0.04);
+    }
+
+    /* ── Beat flash on bar 1 ─────────────────────── */
+    #screen-bezel { transition: box-shadow 0.08s ease-out; }
+    #screen-bezel.beat-flash {
+      box-shadow:
+        inset 0 0 30px rgba(0,0,0,0.8),
+        0 0 0 2px rgba(255,255,255,0.2),
+        0 0 60px rgba(255,255,255,0.12),
+        0 0 120px rgba(0,255,204,0.12);
+    }
+
+    /* ── Scale section ───────────────────────────── */
+    #scale-section { display:flex; flex-direction:column; gap:calc(var(--u)*0.3); }
+    #scale-controls { display:flex; gap:calc(var(--u)*0.35); }
+    .scale-btn {
+      flex:1; min-width:0;
+      padding: calc(var(--u)*0.35) calc(var(--u)*0.25);
+      border:2px solid rgba(0,255,204,0.25);
+      background:#0a1a16;
+      color:rgba(0,255,204,0.65);
+      font-family:'Silkscreen', monospace;
+      font-size: clamp(0.28rem, calc(var(--u)*0.48), 0.7rem);
+      cursor:pointer; text-align:center; transition:all 0.15s;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .scale-btn:hover { border-color:var(--cyan); color:var(--cyan); box-shadow:0 0 8px rgba(0,255,204,0.3); }
+    #rand-btn {
+      border-color:rgba(170,255,0,0.3); color:rgba(170,255,0,0.65);
+    }
+    #rand-btn:hover {
+      border-color:#aaff00; color:#aaff00; box-shadow:0 0 8px rgba(170,255,0,0.35);
+    }
+
+    /* Out-of-scale key dimming */
+    .key-btn.out-scale { opacity:0.22; }
+
+    /* ── Swing display ───────────────────────────── */
+    #swing-wrap { display:flex; flex-direction:column; align-items:center; gap:calc(var(--u)*0.4); }
+    #swing-display {
+      font-family:'Silkscreen', monospace;
+      font-size: clamp(0.85rem, calc(var(--u)*1.5), 2.2rem);
+      color:var(--cyan); text-shadow:var(--glow-sm);
+      text-align:center; letter-spacing:0.1em;
+      border:2px solid rgba(0,255,204,0.3);
+      padding: calc(var(--u)*0.2) calc(var(--u)*0.7);
+      background:#020403;
+      box-shadow: inset 0 0 16px rgba(0,255,204,0.05), 0 0 12px rgba(0,255,204,0.12);
+      min-width: calc(var(--u)*4);
+    }
+    #swing-btns { display:flex; gap:calc(var(--u)*0.5); }
+
+    /* TAP button — slightly wider */
+    #bpm-tap {
+      font-size: clamp(0.28rem, calc(var(--u)*0.48), 0.65rem);
+      letter-spacing:0;
+      width: calc(var(--u)*3.2);
+    }
+
+    /* BPM + Swing row side by side */
+    #bpm-swing-row {
+      display:flex; gap:calc(var(--u)*1); align-items:flex-start;
+      justify-content:center;
+    }
+
+    /* Cabinet outer glow — pulses when playing */
+    #cabinet { transition: filter 0.3s; }
+    #cabinet.playing-glow {
+      filter: drop-shadow(0 0 30px rgba(0,255,204,0.12))
+              drop-shadow(0 0 60px rgba(0,255,204,0.06));
+    }
+
+    /* SHARE button accent */
+    #btn-share {
+      border-color: rgba(170,255,0,0.3);
+      color: rgba(170,255,0,0.65);
+    }
+    #btn-share:hover {
+      border-color:#aaff00; color:#aaff00; box-shadow:0 0 8px rgba(170,255,0,0.3);
+    }
   </style>
 </head>
 <body>
+<canvas id="starfield"></canvas>
 
 <!-- Boot screen -->
 <div id="boot">
@@ -739,12 +834,18 @@
     <div class="rivet bl"></div>
     <div class="rivet br"></div>
 
-    <!-- Left: channel selector + note keyboard -->
+    <!-- Left: channel selector + scale + note keyboard -->
     <div id="left-controls">
       <div>
-        <div class="ctrl-label">CHANNEL SELECT</div>
-        <div id="channel-btns">
-          <!-- built by JS -->
+        <div class="ctrl-label">CHANNEL</div>
+        <div id="channel-btns"><!-- built by JS --></div>
+      </div>
+      <div id="scale-section">
+        <div class="ctrl-label">SCALE — <span id="scale-display">C PENTA</span></div>
+        <div id="scale-controls">
+          <button class="scale-btn" id="scale-root-btn">C</button>
+          <button class="scale-btn" id="scale-name-btn">PENTA</button>
+          <button class="scale-btn" id="rand-btn">🎲 RAND</button>
         </div>
       </div>
       <div id="note-keyboard">
@@ -755,20 +856,29 @@
           <button class="oct-btn" id="oct-up">▲</button>
           <span style="font-size:0.6rem;color:rgba(0,255,204,0.35);margin-left:8px;letter-spacing:0.05em;">OCT</span>
         </div>
-        <div id="keys-row">
-          <!-- built by JS -->
-        </div>
+        <div id="keys-row"><!-- built by JS --></div>
       </div>
     </div>
 
     <!-- Center: transport -->
     <div id="transport">
-      <div id="bpm-display-wrap">
-        <div class="ctrl-label" style="text-align:center;">BPM</div>
-        <div id="bpm-display">120</div>
-        <div id="bpm-btns">
-          <button class="bpm-btn" id="bpm-down">−</button>
-          <button class="bpm-btn" id="bpm-up">+</button>
+      <div id="bpm-swing-row">
+        <div id="bpm-display-wrap">
+          <div class="ctrl-label" style="text-align:center;">BPM</div>
+          <div id="bpm-display">120</div>
+          <div id="bpm-btns">
+            <button class="bpm-btn" id="bpm-down">−</button>
+            <button class="bpm-btn" id="bpm-up">+</button>
+            <button class="bpm-btn" id="bpm-tap">TAP</button>
+          </div>
+        </div>
+        <div id="swing-wrap">
+          <div class="ctrl-label" style="text-align:center;">SWING</div>
+          <div id="swing-display">0%</div>
+          <div id="swing-btns">
+            <button class="bpm-btn" id="swing-down">−</button>
+            <button class="bpm-btn" id="swing-up">+</button>
+          </div>
         </div>
       </div>
       <div id="transport-btns">
@@ -798,7 +908,8 @@
         <div id="save-load">
           <button class="sl-btn" id="btn-save">SAVE</button>
           <button class="sl-btn" id="btn-load">LOAD</button>
-          <button class="sl-btn" id="btn-export">EXPORT</button>
+          <button class="sl-btn" id="btn-share">SHARE</button>
+          <button class="sl-btn" id="btn-export">WAV</button>
         </div>
       </div>
       <div id="status-display">
@@ -821,15 +932,28 @@
 // ── State ────────────────────────────────────────────────────────────────────
 const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
+const SCALES = {
+  CHROMATIC: [0,1,2,3,4,5,6,7,8,9,10,11],
+  MAJOR:     [0,2,4,5,7,9,11],
+  MINOR:     [0,2,3,5,7,8,10],
+  PENTA:     [0,2,4,7,9],
+  BLUES:     [0,3,5,6,7,10],
+  DORIAN:    [0,2,3,5,7,9,10],
+};
+const SCALE_NAMES = Object.keys(SCALES);
+
 const state = {
   playing:   false,
   looping:   true,
   bpm:       120,
+  swing:     0,
+  scale:     'PENTA',
+  scaleRoot: 'C',
   currentStep: -1,
   selectedChannel: 0,
   selectedNote:   'C',
   selectedOctave:  4,
-  selectedStepIdx: null,  // {ch, step} of the currently-selected step cell
+  selectedStepIdx: null,
   channels: [
     { name:'LEAD',  type:'pulse50',  muted:false, volume:0.25, steps: Array(16).fill(null) },
     { name:'PULSE', type:'pulse12',  muted:false, volume:0.22, steps: Array(16).fill(null) },
@@ -839,11 +963,28 @@ const state = {
 };
 // step value: null = empty, { note:'C', octave:4 }
 
+function isNoteInScale(note) {
+  if (state.scale === 'CHROMATIC') return true;
+  const rootIdx = NOTES.indexOf(state.scaleRoot);
+  const noteIdx = NOTES.indexOf(note);
+  const interval = (noteIdx - rootIdx + 12) % 12;
+  return SCALES[state.scale].includes(interval);
+}
+
 // ── Audio ────────────────────────────────────────────────────────────────────
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
+// Master gain + analyser chain
+const masterGain = audioCtx.createGain();
+masterGain.gain.value = 0.85;
+const analyser = audioCtx.createAnalyser();
+analyser.fftSize = 2048;
+analyser.smoothingTimeConstant = 0.75;
+masterGain.connect(analyser);
+analyser.connect(audioCtx.destination);
+const analyserData = new Uint8Array(analyser.fftSize);
+
 // Build a PeriodicWave for a given pulse duty cycle (0–1).
-// duty=0.5 → classic square; duty=0.25 → thinner NES pulse 2 sound.
 function createPulseWave(duty) {
   const n = 256;
   const real = new Float32Array(n);
@@ -853,36 +994,33 @@ function createPulseWave(duty) {
   }
   return audioCtx.createPeriodicWave(real, imag, { disableNormalization: false });
 }
-const pulse50Wave  = createPulseWave(0.5);    // LEAD  — warm, full square
-const pulse12Wave  = createPulseWave(0.125); // PULSE — buzzy, very thin
+const pulse50Wave = createPulseWave(0.5);    // LEAD  — warm, full square
+const pulse12Wave = createPulseWave(0.125);  // PULSE — buzzy, very thin
 
 function noteToFreq(note, octave) {
   const semi = NOTES.indexOf(note) + (octave - 4) * 12;
   return 440 * Math.pow(2, (semi - 9) / 12); // A4=440
 }
 
-function playNote(chIdx, note, octave) {
+function playNote(chIdx, note, octave, atTime) {
   const ch = state.channels[chIdx];
   if (ch.muted) return;
   const stepDuration = 60 / state.bpm / 4;
-  const now = audioCtx.currentTime;
+  const now = atTime !== undefined ? atTime : audioCtx.currentTime;
 
   if (ch.type === 'noise') {
-    // DRUM: three layered voices — noise snap + pitched triangle thud.
-    // Voice selected by octave: C1-B2 = kick, C3-B4 = snare, C5+ = hi-hat.
     const semi = NOTES.indexOf(note) + (octave - 1) * 12;
     let snapDur, snapVol, thudFreqA, thudFreqB, thudDur, thudVol;
-    if (semi < 24) {          // KICK — deep thud, medium snap
+    if (semi < 24) {          // KICK
       snapDur = 0.045; snapVol = 0.6;
       thudFreqA = 190; thudFreqB = 32; thudDur = 0.13; thudVol = 1.3;
-    } else if (semi < 48) {   // SNARE — bright snap, sharp crack
+    } else if (semi < 48) {   // SNARE
       snapDur = 0.07;  snapVol = 1.1;
       thudFreqA = 380; thudFreqB = 85; thudDur = 0.06; thudVol = 0.65;
-    } else {                  // HI-HAT — very short, mostly noise
+    } else {                  // HI-HAT
       snapDur = 0.022; snapVol = 0.9;
       thudFreqA = 900; thudFreqB = 450; thudDur = 0.018; thudVol = 0.15;
     }
-    // Noise snap layer
     const snapSamples = Math.ceil(audioCtx.sampleRate * snapDur);
     const buf = audioCtx.createBuffer(1, snapSamples, audioCtx.sampleRate);
     const data = buf.getChannelData(0);
@@ -890,17 +1028,16 @@ function playNote(chIdx, note, octave) {
     const src = audioCtx.createBufferSource();
     const snapGain = audioCtx.createGain();
     src.buffer = buf;
-    src.connect(snapGain); snapGain.connect(audioCtx.destination);
+    src.connect(snapGain); snapGain.connect(masterGain);
     snapGain.gain.setValueAtTime(ch.volume * snapVol, now);
     snapGain.gain.exponentialRampToValueAtTime(0.001, now + snapDur);
     src.start(now); src.stop(now + snapDur);
-    // Pitched thud layer
     const thudOsc = audioCtx.createOscillator();
     const thudGain = audioCtx.createGain();
     thudOsc.type = 'triangle';
     thudOsc.frequency.setValueAtTime(thudFreqA, now);
     thudOsc.frequency.exponentialRampToValueAtTime(thudFreqB, now + thudDur);
-    thudOsc.connect(thudGain); thudGain.connect(audioCtx.destination);
+    thudOsc.connect(thudGain); thudGain.connect(masterGain);
     thudGain.gain.setValueAtTime(ch.volume * thudVol, now);
     thudGain.gain.exponentialRampToValueAtTime(0.001, now + thudDur);
     thudOsc.start(now); thudOsc.stop(now + thudDur);
@@ -910,24 +1047,21 @@ function playNote(chIdx, note, octave) {
   const freq = noteToFreq(note, octave);
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.connect(gain); gain.connect(masterGain);
 
   if (ch.type === 'pulse50') {
-    // LEAD: downward pitch bite on attack — NES pluck character
     osc.setPeriodicWave(pulse50Wave);
     osc.frequency.setValueAtTime(freq * 1.5, now);
     osc.frequency.exponentialRampToValueAtTime(freq, now + 0.018);
     gain.gain.setValueAtTime(ch.volume, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + stepDuration * 0.55);
   } else if (ch.type === 'pulse12') {
-    // PULSE: strong 2× downward sweep — classic NES "bwaoow" attack
     osc.setPeriodicWave(pulse12Wave);
     osc.frequency.setValueAtTime(freq * 2.0, now);
     osc.frequency.exponentialRampToValueAtTime(freq, now + 0.042);
     gain.gain.setValueAtTime(ch.volume, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + stepDuration * 0.78);
   } else {
-    // BASS (triangle): slight upward sweep from below — plucked bass feel
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(freq * 0.5, now);
     osc.frequency.exponentialRampToValueAtTime(freq, now + 0.02);
@@ -944,7 +1078,7 @@ function beep(freq, dur, vol=0.08) {
   const now = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.connect(gain); gain.connect(masterGain);
   osc.type = 'square';
   osc.frequency.setValueAtTime(freq, now);
   gain.gain.setValueAtTime(vol, now);
@@ -977,17 +1111,22 @@ function scheduleLoop() {
 
   while (nextStepTime < audioCtx.currentTime + lookAhead) {
     const s = scheduledStep;
-    // trigger audio
+    // Swing: delay odd steps
+    const swingOffset = (s % 2 === 1) ? stepDur * state.swing * 0.5 : 0;
+    const noteTime = nextStepTime + swingOffset;
+
     state.channels.forEach((ch, ci) => {
-      if (ch.steps[s]) playNote(ci, ch.steps[s].note, ch.steps[s].octave);
+      if (ch.steps[s]) playNote(ci, ch.steps[s].note, ch.steps[s].octave, noteTime);
     });
-    // schedule UI update
+
     const timeUntil = (nextStepTime - audioCtx.currentTime) * 1000;
     ((step, t) => setTimeout(() => {
       if (!state.playing) return;
       state.currentStep = step;
       renderPlayhead();
       document.getElementById('step-num').textContent = step + 1;
+      // Beat flash on quarter notes
+      if (step % 4 === 0) triggerBeatFlash();
     }, Math.max(0, t)))(s, timeUntil);
 
     scheduledStep = (scheduledStep + 1) % 16;
@@ -999,6 +1138,13 @@ function scheduleLoop() {
     }
   }
   stepTimer = setTimeout(scheduleLoop, 25);
+}
+
+function triggerBeatFlash() {
+  const bezel = document.getElementById('screen-bezel');
+  if (!bezel) return;
+  bezel.classList.add('beat-flash');
+  setTimeout(() => bezel.classList.remove('beat-flash'), 80);
 }
 
 function stopPlaying() {
@@ -1114,19 +1260,19 @@ function updateBeatLightNotes() {
 function buildKeyboard() {
   const row = document.getElementById('keys-row');
   row.innerHTML = '';
-  // Two rows in one flex: natural notes + sharps mixed
-  // Simple approach: all 12 notes in a row
+  const isDrum = state.channels[state.selectedChannel].type === 'noise';
   NOTES.forEach(n => {
     const btn = document.createElement('div');
     btn.className = 'key-btn ' + (n.includes('#') ? 'sharp' : 'natural');
     if (n === state.selectedNote) btn.classList.add('selected');
+    // Dim out-of-scale keys (not for drum channel)
+    if (!isDrum && !isNoteInScale(n)) btn.classList.add('out-scale');
     btn.textContent = n;
     btn.dataset.note = n;
     btn.addEventListener('click', () => {
       state.selectedNote = n;
       buildKeyboard();
       updateNoteDisplay();
-      // If a step is selected, update its note
       if (state.selectedStepIdx !== null) {
         const { ch, step } = state.selectedStepIdx;
         if (state.channels[ch].steps[step]) {
@@ -1139,6 +1285,125 @@ function buildKeyboard() {
     });
     row.appendChild(btn);
   });
+}
+
+function updateScaleDisplay() {
+  const el = document.getElementById('scale-display');
+  if (el) el.textContent = state.scaleRoot + ' ' + state.scale;
+  const rootBtn = document.getElementById('scale-root-btn');
+  if (rootBtn) rootBtn.textContent = state.scaleRoot;
+  const nameBtn = document.getElementById('scale-name-btn');
+  if (nameBtn) nameBtn.textContent = state.scale;
+  buildKeyboard(); // refresh key highlighting
+}
+
+function randomFill() {
+  const ci = state.selectedChannel;
+  const ch = state.channels[ci];
+  const isDrum = ch.type === 'noise';
+  const density = 0.35;
+  for (let s = 0; s < 16; s++) {
+    if (Math.random() < density) {
+      if (isDrum) {
+        // Random drum voice: kick/snare/hat
+        const voices = [
+          { note: 'C', octave: 1 },
+          { note: 'C', octave: 3 },
+          { note: 'C', octave: 5 },
+        ];
+        const v = voices[Math.floor(Math.random() * voices.length)];
+        ch.steps[s] = { note: v.note, octave: v.octave };
+      } else {
+        // Pick random note in current scale
+        const scaleIntervals = SCALES[state.scale];
+        const interval = scaleIntervals[Math.floor(Math.random() * scaleIntervals.length)];
+        const rootIdx = NOTES.indexOf(state.scaleRoot);
+        const noteIdx = (rootIdx + interval) % 12;
+        const octave = state.selectedOctave + (Math.random() > 0.8 ? 1 : 0);
+        ch.steps[s] = { note: NOTES[noteIdx], octave: Math.min(octave, 7) };
+      }
+    } else {
+      ch.steps[s] = null;
+    }
+  }
+  // Rebuild just this channel's steps
+  for (let s = 0; s < 16; s++) renderStep(ci, s);
+  updateBeatLightNotes();
+  beep(440, 0.05); setTimeout(() => beep(554, 0.05), 60); setTimeout(() => beep(659, 0.08), 120);
+  setStatus('RANDOM FILL: ' + ch.name);
+}
+
+// ── Tap Tempo ─────────────────────────────────────────────────────────────────
+let tapTimes = [];
+function tapTempo() {
+  const now = performance.now();
+  tapTimes.push(now);
+  // Keep only recent taps (last 2 seconds)
+  tapTimes = tapTimes.filter(t => now - t < 3000);
+  if (tapTimes.length < 2) { setStatus('TAP MORE...'); return; }
+  const intervals = [];
+  for (let i = 1; i < tapTimes.length; i++) intervals.push(tapTimes[i] - tapTimes[i-1]);
+  const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+  const bpm = Math.round(60000 / avg);
+  state.bpm = Math.max(40, Math.min(240, bpm));
+  document.getElementById('bpm-display').textContent = state.bpm;
+  setStatus('BPM: ' + state.bpm);
+  beep(880, 0.03, 0.06);
+}
+
+// ── Share / URL ───────────────────────────────────────────────────────────────
+function encodePattern() {
+  const data = {
+    bpm: state.bpm,
+    swing: state.swing,
+    scale: state.scale,
+    scaleRoot: state.scaleRoot,
+    channels: state.channels.map(ch => ({
+      volume: ch.volume,
+      muted: ch.muted,
+      steps: ch.steps.map(s => s ? s.note + s.octave : '.')
+    }))
+  };
+  return btoa(JSON.stringify(data));
+}
+
+function sharePattern() {
+  const hash = encodePattern();
+  const url = window.location.origin + window.location.pathname + '#' + hash;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(() => setStatus('URL COPIED!'));
+  } else {
+    prompt('Copy this URL:', url);
+  }
+  beep(523, 0.05); setTimeout(() => beep(784, 0.1), 80);
+}
+
+function loadFromHash() {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return;
+  try {
+    const data = JSON.parse(atob(hash));
+    if (data.bpm) state.bpm = data.bpm;
+    if (data.swing !== undefined) state.swing = data.swing;
+    if (data.scale) state.scale = data.scale;
+    if (data.scaleRoot) state.scaleRoot = data.scaleRoot;
+    if (data.channels) {
+      data.channels.forEach((saved, ci) => {
+        if (!state.channels[ci]) return;
+        state.channels[ci].volume = saved.volume;
+        state.channels[ci].muted  = saved.muted;
+        state.channels[ci].steps  = saved.steps.map(s => {
+          if (s === '.') return null;
+          const note = s.slice(0, s.length - 1);
+          const octave = parseInt(s.slice(-1));
+          return isNaN(octave) ? null : { note, octave };
+        });
+      });
+    }
+    setStatus('PATTERN LOADED FROM URL.');
+  } catch(e) {
+    // ignore malformed hash
+  }
 }
 
 function updateNoteDisplay() {
@@ -1403,7 +1668,6 @@ function audioBufferToWav(buffer) {
 // ── Visualizer ────────────────────────────────────────────────────────────────
 const visCanvas = document.getElementById('vis-canvas');
 const visCtx = visCanvas.getContext('2d');
-let visPhase = 0;
 
 function drawVis() {
   const W = visCanvas.offsetWidth;
@@ -1412,40 +1676,98 @@ function drawVis() {
   if (visCanvas.height !== H) visCanvas.height = H;
 
   visCtx.clearRect(0, 0, W, H);
-  visCtx.fillStyle = '#020403';
+  visCtx.fillStyle = '#020a06';
   visCtx.fillRect(0, 0, W, H);
 
-  if (state.playing) {
-    visCtx.strokeStyle = 'rgba(0,255,204,0.6)';
-    visCtx.lineWidth = 1.5;
-    visCtx.beginPath();
-    const freq = state.bpm / 60 * 4;
-    for (let x = 0; x < W; x++) {
-      const t = (x / W) * Math.PI * 8 + visPhase;
-      const wave1 = Math.sin(t * 1.0) * 0.4;
-      const wave2 = Math.sin(t * 2.0) * 0.2;
-      const wave3 = (((t % (Math.PI * 2)) / (Math.PI * 2)) - 0.5) * 0.3;
-      const y = H / 2 + (wave1 + wave2 + wave3) * H * 0.38;
-      x === 0 ? visCtx.moveTo(x, y) : visCtx.lineTo(x, y);
-    }
-    visCtx.stroke();
-    visPhase += 0.15;
+  analyser.getByteTimeDomainData(analyserData);
+  const bufLen = analyserData.length;
 
-    // Beat flash
-    if (state.currentStep % 4 === 0) {
-      visCtx.fillStyle = 'rgba(0,255,204,0.05)';
-      visCtx.fillRect(0, 0, W, H);
-    }
-  } else {
-    // Static idle line
-    visCtx.strokeStyle = 'rgba(0,255,204,0.15)';
+  // Glow trail
+  visCtx.shadowBlur = 8;
+  visCtx.shadowColor = 'rgba(0,255,204,0.5)';
+  visCtx.strokeStyle = 'rgba(0,255,204,0.85)';
+  visCtx.lineWidth = 1.5;
+  visCtx.beginPath();
+  const sliceW = W / bufLen;
+  let x = 0;
+  for (let i = 0; i < bufLen; i++) {
+    const v = analyserData[i] / 128.0;
+    const y = (v * H) / 2;
+    i === 0 ? visCtx.moveTo(x, y) : visCtx.lineTo(x, y);
+    x += sliceW;
+  }
+  visCtx.stroke();
+  visCtx.shadowBlur = 0;
+
+  // Center idle line when silent
+  const avg = analyserData.reduce((s, v) => s + Math.abs(v - 128), 0) / bufLen;
+  if (avg < 1) {
+    visCtx.strokeStyle = 'rgba(0,255,204,0.18)';
     visCtx.lineWidth = 1;
     visCtx.beginPath();
     visCtx.moveTo(0, H/2); visCtx.lineTo(W, H/2);
     visCtx.stroke();
   }
+
   requestAnimationFrame(drawVis);
 }
+
+// ── Starfield ─────────────────────────────────────────────────────────────────
+(function initStarfield() {
+  const canvas = document.getElementById('starfield');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const STAR_COUNT = 180;
+  let stars = [];
+
+  function resize() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  for (let i = 0; i < STAR_COUNT; i++) {
+    stars.push({
+      x: Math.random(),
+      y: Math.random(),
+      r: Math.random() * 1.2 + 0.2,
+      speed: Math.random() * 0.00008 + 0.00002,
+      twinkle: Math.random() * Math.PI * 2,
+      twinkleSpeed: Math.random() * 0.04 + 0.01,
+    });
+  }
+
+  function drawStars() {
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Subtle grid lines
+    ctx.strokeStyle = 'rgba(0,255,100,0.03)';
+    ctx.lineWidth = 1;
+    const gridSpacing = 80;
+    for (let gx = 0; gx < W; gx += gridSpacing) {
+      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke();
+    }
+    for (let gy = 0; gy < H; gy += gridSpacing) {
+      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
+    }
+
+    stars.forEach(s => {
+      s.twinkle += s.twinkleSpeed;
+      s.x += s.speed;
+      if (s.x > 1) { s.x = 0; s.y = Math.random(); }
+      const alpha = 0.3 + Math.sin(s.twinkle) * 0.25;
+      ctx.fillStyle = `rgba(0,255,204,${alpha.toFixed(2)})`;
+      ctx.beginPath();
+      ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    requestAnimationFrame(drawStars);
+  }
+  drawStars();
+})();
 
 // ── Event Wiring ──────────────────────────────────────────────────────────────
 document.getElementById('btn-play').addEventListener('click', () => {
@@ -1500,6 +1822,35 @@ document.getElementById('oct-down').addEventListener('click', () => {
 document.getElementById('btn-save').addEventListener('click', saveToStorage);
 document.getElementById('btn-load').addEventListener('click', loadFromStorage);
 document.getElementById('btn-export').addEventListener('click', exportWAV);
+document.getElementById('btn-share').addEventListener('click', sharePattern);
+document.getElementById('rand-btn').addEventListener('click', randomFill);
+document.getElementById('bpm-tap').addEventListener('click', tapTempo);
+
+// Swing controls
+document.getElementById('swing-up').addEventListener('click', () => {
+  state.swing = Math.min(0.5, parseFloat((state.swing + 0.05).toFixed(2)));
+  document.getElementById('swing-display').textContent = Math.round(state.swing * 100) + '%';
+  setStatus('SWING: ' + Math.round(state.swing * 100) + '%');
+});
+document.getElementById('swing-down').addEventListener('click', () => {
+  state.swing = Math.max(0, parseFloat((state.swing - 0.05).toFixed(2)));
+  document.getElementById('swing-display').textContent = Math.round(state.swing * 100) + '%';
+  setStatus('SWING: ' + Math.round(state.swing * 100) + '%');
+});
+
+// Scale controls
+document.getElementById('scale-root-btn').addEventListener('click', () => {
+  const idx = (NOTES.indexOf(state.scaleRoot) + 1) % NOTES.length;
+  state.scaleRoot = NOTES[idx];
+  updateScaleDisplay();
+  setStatus('SCALE ROOT: ' + state.scaleRoot);
+});
+document.getElementById('scale-name-btn').addEventListener('click', () => {
+  const idx = (SCALE_NAMES.indexOf(state.scale) + 1) % SCALE_NAMES.length;
+  state.scale = SCALE_NAMES[idx];
+  updateScaleDisplay();
+  setStatus('SCALE: ' + state.scale);
+});
 
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
@@ -1512,7 +1863,8 @@ document.addEventListener('keydown', e => {
   if (e.code === 'ArrowDown') { e.preventDefault(); document.getElementById('oct-down').click(); }
   if (e.code === 'ArrowLeft') { e.preventDefault(); state.bpm = Math.max(40, state.bpm-5); document.getElementById('bpm-display').textContent = state.bpm; }
   if (e.code === 'ArrowRight'){ e.preventDefault(); state.bpm = Math.min(240, state.bpm+5); document.getElementById('bpm-display').textContent = state.bpm; }
-  // Number keys 1-4 select channel
+  if (e.code === 'KeyT') tapTempo();
+  if (e.code === 'KeyR') randomFill();
   if (['Digit1','Digit2','Digit3','Digit4'].includes(e.code)) {
     selectChannel(parseInt(e.code.replace('Digit','')) - 1);
   }
@@ -1531,7 +1883,11 @@ function startBoot() {
   bootEl.classList.add('fade-out');
   setTimeout(() => {
     bootEl.remove();
+    loadFromHash();
     buildUI();
+    updateScaleDisplay();
+    document.getElementById('bpm-display').textContent = state.bpm;
+    document.getElementById('swing-display').textContent = Math.round(state.swing * 100) + '%';
     drawVis();
   }, 800);
 }

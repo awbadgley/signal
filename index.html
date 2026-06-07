@@ -149,10 +149,14 @@
 
     /* ── Marquee — neon sign ─────────────── */
     #marquee {
-      width:100%; background:transparent;
+      background:transparent;
       border:0;
       padding:calc(var(--u)*0.4) 0;
       overflow:hidden; flex-shrink:0;
+      /* bleed past cabinet's horizontal padding to reach window edges */
+      margin-left:calc(var(--u)*-1.2);
+      margin-right:calc(var(--u)*-1.2);
+      width:calc(100% + calc(var(--u)*2.4));
     }
     #marquee-inner {
       display:inline-block; white-space:nowrap;
@@ -175,6 +179,7 @@
       border:none;
       padding:calc(var(--u)*0.9);
       display:flex; flex-direction:column;
+      position:relative; z-index:2;
       box-shadow:
         0 0 18px rgba(255,0,255,0.5),
         0 0 50px rgba(255,0,255,0.25),
@@ -303,13 +308,19 @@
       width:100%; flex-shrink:0;
       background:rgba(0,0,0,0.72);
       border:none;
-      padding:calc(var(--u)*0.75) calc(var(--u)*1);
-      display:grid; grid-template-columns:1fr auto 1fr;
-      gap:calc(var(--u)*0.8); align-items:center;
+      padding:calc(var(--u)*0.75) calc(var(--u)*1) calc(var(--u)*0.5);
+      display:flex; flex-direction:column;
+      gap:calc(var(--u)*0.7);
       position:relative;
     }
 
-    #left-controls { display:flex; flex-direction:column; gap:calc(var(--u)*0.55); }
+    /* Top row: 4 evenly-spaced zones */
+    #control-row {
+      display:flex; justify-content:space-evenly; align-items:center;
+      gap:0;
+    }
+
+    #left-controls { display:flex; flex-direction:column; gap:calc(var(--u)*0.55); align-items:center; }
 
     /* Section labels — small, glowing */
     .ctrl-label {
@@ -338,14 +349,13 @@
     #scale-section { display:flex; flex-direction:column; gap:calc(var(--u)*0.25); }
     #scale-controls { display:flex; gap:calc(var(--u)*0.3); }
     .scale-btn {
-      flex:1; min-width:0;
-      padding:calc(var(--u)*0.3) calc(var(--u)*0.2);
+      padding:calc(var(--u)*0.3) calc(var(--u)*0.45);
       border:1px solid rgba(255,170,0,0.3);
       background:transparent; color:rgba(255,170,0,0.65);
       font-family:'Silkscreen', monospace;
       font-size:clamp(0.28rem, calc(var(--u)*0.45), 0.65rem);
       cursor:pointer; text-align:center; transition:all 0.12s;
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      white-space:nowrap;
     }
     .scale-btn:hover {
       border-color:var(--amber); color:var(--amber);
@@ -359,8 +369,8 @@
       box-shadow:0 0 6px var(--green), 0 0 16px rgba(57,255,20,0.4);
     }
 
-    /* Note keyboard */
-    #note-keyboard { display:flex; flex-direction:column; gap:calc(var(--u)*0.35); }
+    /* Note keyboard — full-width bottom strip */
+    #note-keyboard { display:flex; flex-direction:column; gap:calc(var(--u)*0.3); width:100%; }
     #octave-row { display:flex; align-items:center; gap:calc(var(--u)*0.45); }
     #octave-display {
       font-family:'Silkscreen', monospace;
@@ -384,25 +394,29 @@
       box-shadow:0 0 6px var(--cyan), 0 0 16px rgba(0,255,255,0.4);
     }
 
-    #keys-row { display:flex; gap:calc(var(--u)*0.18); }
+    /* Piano keyboard — naturals fill the row, sharps absolute on top */
+    #keys-row { display:flex; gap:calc(var(--u)*0.1); width:100%; position:relative; }
     .key-btn {
-      flex:1; height:calc(var(--u)*2.5);
+      flex:1; height:calc(var(--u)*3.2); min-width:0;
       border:1px solid rgba(255,255,255,0.5);
       background:rgba(255,255,255,0.18);
       cursor:pointer;
       display:flex; align-items:flex-end; justify-content:center;
-      padding-bottom:calc(var(--u)*0.18);
+      padding-bottom:calc(var(--u)*0.2);
       font-family:'Silkscreen', monospace;
-      font-size:clamp(0.26rem, calc(var(--u)*0.42), 0.62rem);
+      font-size:clamp(0.22rem, calc(var(--u)*0.38), 0.58rem);
       color:rgba(255,255,255,0.85);
       transition:all 0.1s;
       box-shadow:0 0 6px rgba(255,255,255,0.1), inset 0 0 8px rgba(255,255,255,0.06);
     }
     .key-btn.sharp {
-      height:calc(var(--u)*1.7); align-self:flex-start;
+      position:absolute; top:0;
+      flex:none; /* don't participate in flex sizing */
+      height:calc(var(--u)*2.0);
       background:rgba(40,0,60,0.92);
       border-color:rgba(200,80,255,0.55);
       color:rgba(220,160,255,0.8);
+      z-index:2;
       box-shadow:0 0 5px rgba(160,0,220,0.25), inset 0 0 6px rgba(80,0,100,0.6);
     }
     .key-btn:hover {
@@ -418,9 +432,9 @@
     .key-btn.out-scale { opacity:0.45; }
 
     /* ── Transport — center ──────────────── */
-    #transport { display:flex; flex-direction:row; align-items:center; justify-content:center; gap:calc(var(--u)*1.2); }
+    /* #transport wrapper gone — bpm-swing-row and transport-btns are direct children of #control-row */
 
-    #bpm-swing-row { display:flex; gap:calc(var(--u)*1.2); align-items:flex-start; justify-content:center; }
+    #bpm-swing-row { display:flex; gap:calc(var(--u)*1.2); align-items:flex-start; }
     #bpm-display-wrap { display:flex; flex-direction:column; align-items:center; gap:calc(var(--u)*0.35); }
 
     /* BPM display — neon amber LED */
@@ -531,8 +545,8 @@
     }
 
     /* Right controls */
-    #right-controls { display:flex; flex-direction:column; gap:calc(var(--u)*0.6); align-items:flex-end; }
-    #save-load { display:flex; gap:calc(var(--u)*0.35); flex-wrap:wrap; justify-content:flex-end; }
+    #right-controls { display:flex; flex-direction:column; gap:calc(var(--u)*0.6); align-items:center; }
+    #save-load { display:flex; gap:calc(var(--u)*0.35); flex-wrap:wrap; justify-content:center; }
     .sl-btn {
       padding:calc(var(--u)*0.35) calc(var(--u)*0.65);
       border:1px solid rgba(255,255,255,0.15);
@@ -556,7 +570,7 @@
     #status-display {
       font-size:clamp(0.35rem, calc(var(--u)*0.52), 0.78rem);
       color:rgba(255,255,255,0.2);
-      text-align:right; line-height:1.6; letter-spacing:0.05em;
+      text-align:center; line-height:1.6; letter-spacing:0.05em;
     }
     #status-msg {
       color:var(--magenta); min-height:1em;
@@ -844,34 +858,26 @@
     <div class="rivet bl"></div>
     <div class="rivet br"></div>
 
-    <!-- Left: channel selector + scale + note keyboard -->
-    <div id="left-controls">
-      <div>
-        <div class="ctrl-label">CHANNEL</div>
-        <div id="channel-btns"><!-- built by JS --></div>
-      </div>
-      <div id="scale-section">
-        <div class="ctrl-label">SCALE — <span id="scale-display">C PENTA</span></div>
-        <div id="scale-controls">
-          <button class="scale-btn" id="scale-root-btn">C</button>
-          <button class="scale-btn" id="scale-name-btn">PENTA</button>
-          <button class="scale-btn" id="rand-btn">🎲 RAND</button>
-        </div>
-      </div>
-      <div id="note-keyboard">
-        <div class="ctrl-label">NOTE — <span id="current-note-display">C4</span></div>
-        <div id="octave-row">
-          <button class="oct-btn" id="oct-down">▼</button>
-          <div id="octave-display">4</div>
-          <button class="oct-btn" id="oct-up">▲</button>
-          <span style="font-size:0.6rem;color:rgba(0,255,255,0.3);margin-left:8px;letter-spacing:0.05em;">OCT</span>
-        </div>
-        <div id="keys-row"><!-- built by JS --></div>
-      </div>
-    </div>
+    <!-- Top row: 4 evenly-spaced zones -->
+    <div id="control-row">
 
-    <!-- Center: transport -->
-    <div id="transport">
+      <!-- Zone 1: channel selector + scale -->
+      <div id="left-controls">
+        <div>
+          <div class="ctrl-label" style="text-align:center;">CHANNEL</div>
+          <div id="channel-btns"><!-- built by JS --></div>
+        </div>
+        <div id="scale-section">
+          <div class="ctrl-label">SCALE — <span id="scale-display">C PENTA</span></div>
+          <div id="scale-controls">
+            <button class="scale-btn" id="scale-root-btn">C</button>
+            <button class="scale-btn" id="scale-name-btn">PENTA</button>
+            <button class="scale-btn" id="rand-btn">🎲 RAND</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Zone 2: BPM + Swing -->
       <div id="bpm-swing-row">
         <div id="bpm-display-wrap">
           <div class="ctrl-label" style="text-align:center;">BPM</div>
@@ -891,6 +897,8 @@
           </div>
         </div>
       </div>
+
+      <!-- Zone 3: Transport buttons -->
       <div id="transport-btns">
         <button class="transport-btn" id="btn-loop" title="Loop">
           <span class="btn-icon">↺</span>
@@ -909,24 +917,37 @@
           <span>CLR</span>
         </button>
       </div>
-    </div>
 
-    <!-- Right: save/load + status -->
-    <div id="right-controls">
-      <div>
-        <div class="ctrl-label" style="text-align:right;">MEMORY</div>
-        <div id="save-load">
-          <button class="sl-btn" id="btn-save">SAVE</button>
-          <button class="sl-btn" id="btn-load">LOAD</button>
-          <button class="sl-btn" id="btn-share">SHARE</button>
-          <button class="sl-btn" id="btn-export">WAV</button>
+      <!-- Zone 4: Save/Load + status -->
+      <div id="right-controls">
+        <div>
+          <div class="ctrl-label" style="text-align:center;">MEMORY</div>
+          <div id="save-load">
+            <button class="sl-btn" id="btn-save">SAVE</button>
+            <button class="sl-btn" id="btn-load">LOAD</button>
+            <button class="sl-btn" id="btn-share">SHARE</button>
+            <button class="sl-btn" id="btn-export">WAV</button>
+          </div>
+        </div>
+        <div id="status-display">
+          <div id="status-msg">READY.</div>
+          <div>CHANNELS: 4 &nbsp;|&nbsp; STEPS: 16</div>
+          <div>© 2026 SIGNAL</div>
         </div>
       </div>
-      <div id="status-display">
-        <div id="status-msg">READY.</div>
-        <div>CHANNELS: 4 &nbsp;|&nbsp; STEPS: 16</div>
-        <div>© 2026 SIGNAL</div>
+
+    </div><!-- /#control-row -->
+
+    <!-- Full-width keyboard row -->
+    <div id="note-keyboard">
+      <div id="octave-row">
+        <button class="oct-btn" id="oct-down">▼</button>
+        <div id="octave-display">4</div>
+        <button class="oct-btn" id="oct-up">▲</button>
+        <span style="font-size:0.6rem;color:rgba(0,255,255,0.3);margin-left:6px;letter-spacing:0.05em;">BASE OCT</span>
+        <span style="font-size:0.6rem;color:rgba(255,255,255,0.25);margin-left:12px;letter-spacing:0.05em;">NOTE — <span id="current-note-display">C4</span></span>
       </div>
+      <div id="keys-row"><!-- built by JS --></div>
     </div>
 
   </div>
@@ -962,7 +983,8 @@ const state = {
   currentStep: -1,
   selectedChannel: 0,
   selectedNote:   'C',
-  selectedOctave:  4,
+  selectedOctave:  4,   // base octave — keyboard display, shifted by oct buttons
+  selectedKeyOctave: 4, // octave of the currently highlighted key
   selectedStepIdx: null,
   channels: [
     { name:'LEAD',  type:'pulse50',  muted:false, volume:0.25, steps: Array(16).fill(null) },
@@ -994,6 +1016,22 @@ masterGain.connect(analyser);
 analyser.connect(audioCtx.destination);
 const analyserData = new Uint8Array(analyser.fftSize);
 
+// 80s tape-echo delay — dotted-eighth feel, subtle mix
+const echoDelay = audioCtx.createDelay(1.0);
+echoDelay.delayTime.value = 0.19;          // ~190ms — dotted-eighth at 120bpm
+const echoFeedback = audioCtx.createGain();
+echoFeedback.gain.value = 0.28;            // two audible repeats then fade
+const echoWet = audioCtx.createGain();
+echoWet.gain.value = 0.22;                 // blend: present but not dominant
+echoDelay.connect(echoFeedback);
+echoFeedback.connect(echoDelay);           // feedback loop
+echoDelay.connect(echoWet);
+echoWet.connect(masterGain);
+// echoSend is what synth voices connect to for echo
+const echoSend = audioCtx.createGain();
+echoSend.gain.value = 1.0;
+echoSend.connect(echoDelay);
+
 // Build a PeriodicWave for a given pulse duty cycle (0–1).
 function createPulseWave(duty) {
   const n = 256;
@@ -1021,15 +1059,15 @@ function playNote(chIdx, note, octave, atTime) {
   if (ch.type === 'noise') {
     const semi = NOTES.indexOf(note) + (octave - 1) * 12;
     let snapDur, snapVol, thudFreqA, thudFreqB, thudDur, thudVol;
-    if (semi < 24) {          // KICK
-      snapDur = 0.045; snapVol = 0.6;
-      thudFreqA = 190; thudFreqB = 32; thudDur = 0.13; thudVol = 1.3;
-    } else if (semi < 48) {   // SNARE
-      snapDur = 0.07;  snapVol = 1.1;
-      thudFreqA = 380; thudFreqB = 85; thudDur = 0.06; thudVol = 0.65;
-    } else {                  // HI-HAT
-      snapDur = 0.022; snapVol = 0.9;
-      thudFreqA = 900; thudFreqB = 450; thudDur = 0.018; thudVol = 0.15;
+    if (semi < 24) {          // KICK — deep thud, punchy 80s drum machine
+      snapDur = 0.055; snapVol = 0.5;
+      thudFreqA = 220; thudFreqB = 28; thudDur = 0.18; thudVol = 1.6;
+    } else if (semi < 48) {   // SNARE — cracking 808/909 snap
+      snapDur = 0.11;  snapVol = 1.4;
+      thudFreqA = 320; thudFreqB = 120; thudDur = 0.09; thudVol = 0.8;
+    } else {                  // HI-HAT — tight metallic tick
+      snapDur = 0.028; snapVol = 1.1;
+      thudFreqA = 1100; thudFreqB = 600; thudDur = 0.022; thudVol = 0.12;
     }
     const snapSamples = Math.ceil(audioCtx.sampleRate * snapDur);
     const buf = audioCtx.createBuffer(1, snapSamples, audioCtx.sampleRate);
@@ -1055,33 +1093,85 @@ function playNote(chIdx, note, octave, atTime) {
   }
 
   const freq = noteToFreq(note, octave);
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.connect(gain); gain.connect(masterGain);
+  const noteDur = stepDuration;
 
   if (ch.type === 'pulse50') {
-    osc.setPeriodicWave(pulse50Wave);
-    osc.frequency.setValueAtTime(freq * 1.5, now);
-    osc.frequency.exponentialRampToValueAtTime(freq, now + 0.018);
-    gain.gain.setValueAtTime(ch.volume, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + stepDuration * 0.55);
-  } else if (ch.type === 'pulse12') {
-    osc.setPeriodicWave(pulse12Wave);
-    osc.frequency.setValueAtTime(freq * 2.0, now);
-    osc.frequency.exponentialRampToValueAtTime(freq, now + 0.042);
-    gain.gain.setValueAtTime(ch.volume, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + stepDuration * 0.78);
-  } else {
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(freq * 0.5, now);
-    osc.frequency.exponentialRampToValueAtTime(freq, now + 0.02);
-    gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(ch.volume, now + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + stepDuration * 0.94);
-  }
+    // ── LEAD: detuned dual-oscillator square → classic 80s synth chorus ──
+    const gainNode = audioCtx.createGain();
+    gainNode.connect(echoSend);
+    gainNode.connect(masterGain);
+    // Two oscillators slightly detuned for thickness
+    [0, 7].forEach(centOffset => {
+      const o = audioCtx.createOscillator();
+      o.setPeriodicWave(pulse50Wave);
+      const detune = centOffset; // 0 and +7 cents
+      o.frequency.setValueAtTime(freq * Math.pow(2, detune/1200) * 1.004, now);
+      o.frequency.exponentialRampToValueAtTime(freq * Math.pow(2, detune/1200), now + 0.022);
+      o.connect(gainNode);
+      o.start(now); o.stop(now + noteDur);
+    });
+    // Attack snap, then sustain with slight mid-decay
+    gainNode.gain.setValueAtTime(ch.volume * 1.1, now);
+    gainNode.gain.setValueAtTime(ch.volume * 0.75, now + 0.04);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + noteDur * 0.72);
 
-  osc.start(now);
-  osc.stop(now + stepDuration);
+  } else if (ch.type === 'pulse12') {
+    // ── PULSE: thin buzz + harmony fifth → SID chip / early synthesizer ──
+    const gainNode = audioCtx.createGain();
+    gainNode.connect(echoSend);
+    gainNode.connect(masterGain);
+    // Main pulse osc with pitch-drop attack
+    const osc = audioCtx.createOscillator();
+    osc.setPeriodicWave(pulse12Wave);
+    osc.frequency.setValueAtTime(freq * 1.8, now);
+    osc.frequency.exponentialRampToValueAtTime(freq, now + 0.025);
+    osc.connect(gainNode);
+    osc.start(now); osc.stop(now + noteDur);
+    // Second osc at 50% duty (fuller) detuned +5 cents for width
+    const osc2 = audioCtx.createOscillator();
+    const osc2Gain = audioCtx.createGain();
+    osc2.setPeriodicWave(pulse50Wave);
+    osc2.frequency.setValueAtTime(freq * Math.pow(2, 5/1200), now);
+    osc2Gain.gain.value = 0.45;
+    osc2.connect(osc2Gain); osc2Gain.connect(gainNode);
+    osc2.start(now); osc2.stop(now + noteDur);
+    // Boosted volume — thin pulse needs extra gain to cut through
+    gainNode.gain.setValueAtTime(ch.volume * 1.6, now);
+    gainNode.gain.setValueAtTime(ch.volume * 1.1, now + 0.035);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + noteDur * 0.85);
+
+  } else {
+    // ── BASS: sawtooth + low-pass filter sweep → Moog-style synth bass ──
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.Q.value = 4.5;
+    // Filter sweeps from bright to dark — classic Moog envelope
+    filter.frequency.setValueAtTime(freq * 18, now);
+    filter.frequency.exponentialRampToValueAtTime(freq * 2.2, now + noteDur * 0.35);
+    filter.frequency.exponentialRampToValueAtTime(freq * 1.1, now + noteDur * 0.9);
+
+    const gainNode = audioCtx.createGain();
+    filter.connect(gainNode); gainNode.connect(masterGain);
+
+    // Main sawtooth
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(freq, now);
+    osc.connect(filter);
+    osc.start(now); osc.stop(now + noteDur);
+
+    // Sub-oscillator one octave below for body
+    const sub = audioCtx.createOscillator();
+    const subGain = audioCtx.createGain();
+    sub.type = 'sine'; sub.frequency.value = freq * 0.5;
+    subGain.gain.value = 0.55;
+    sub.connect(subGain); subGain.connect(gainNode);
+    sub.start(now); sub.stop(now + noteDur);
+
+    gainNode.gain.setValueAtTime(0.001, now);
+    gainNode.gain.linearRampToValueAtTime(ch.volume * 1.15, now + 0.012);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + noteDur * 0.92);
+  }
 }
 
 function beep(freq, dur, vol=0.08) {
@@ -1271,30 +1361,77 @@ function buildKeyboard() {
   const row = document.getElementById('keys-row');
   row.innerHTML = '';
   const isDrum = state.channels[state.selectedChannel].type === 'noise';
-  NOTES.forEach(n => {
-    const btn = document.createElement('div');
-    btn.className = 'key-btn ' + (n.includes('#') ? 'sharp' : 'natural');
-    if (n === state.selectedNote) btn.classList.add('selected');
-    // Dim out-of-scale keys (not for drum channel)
-    if (!isDrum && !isNoteInScale(n)) btn.classList.add('out-scale');
-    btn.textContent = n;
-    btn.dataset.note = n;
-    btn.addEventListener('click', () => {
+  const baseOct = state.selectedOctave;
+
+  // Piano layout: 7 naturals per octave form the flex row,
+  // 5 sharps per octave are absolutely positioned on top.
+  const NATURALS = ['C','D','E','F','G','A','B'];
+  // Each sharp: [noteName, rightNaturalIndex within octave (0-based)]
+  // e.g. C# sits just left of D (index 1), D# just left of E (index 2), etc.
+  const SHARPS = [['C#',1],['D#',2],['F#',4],['G#',5],['A#',6]];
+  const OCTAVES = 2;
+  const totalNaturals = OCTAVES * NATURALS.length; // 14
+  // Sharp width as fraction of one natural-key slot
+  const SHARP_W_FRAC = 0.65;
+
+  function makeClickHandler(n, oct) {
+    return () => {
       state.selectedNote = n;
+      state.selectedKeyOctave = oct;  // track which key is lit, don't shift the display base
       buildKeyboard();
       updateNoteDisplay();
       if (state.selectedStepIdx !== null) {
         const { ch, step } = state.selectedStepIdx;
         if (state.channels[ch].steps[step]) {
           state.channels[ch].steps[step].note = n;
-          state.channels[ch].steps[step].octave = state.selectedOctave;
+          state.channels[ch].steps[step].octave = oct;
           renderStep(ch, step);
         }
       }
-      beep(noteToFreq(n, state.selectedOctave) || 440, 0.1, 0.04);
+      beep(noteToFreq(n, oct) || 440, 0.1, 0.04);
+    };
+  }
+
+  // Pass 1: natural keys (flex children)
+  for (let o = 0; o < OCTAVES; o++) {
+    const oct = baseOct + o;
+    NATURALS.forEach(n => {
+      const btn = document.createElement('div');
+      btn.className = 'key-btn natural';
+      if (n === state.selectedNote && oct === state.selectedKeyOctave) btn.classList.add('selected');
+      if (!isDrum && !isNoteInScale(n)) btn.classList.add('out-scale');
+      btn.textContent = n;
+      btn.dataset.note = n; btn.dataset.octave = oct;
+      btn.addEventListener('click', makeClickHandler(n, oct));
+      row.appendChild(btn);
     });
-    row.appendChild(btn);
-  });
+  }
+
+  // Pass 2: sharp keys — positioned after layout so we can measure natural width
+  // Use percentage positions based on natural count
+  const natPct = 100 / totalNaturals; // % width of one natural key
+  const sharpWPct = natPct * SHARP_W_FRAC;
+
+  for (let o = 0; o < OCTAVES; o++) {
+    const oct = baseOct + o;
+    SHARPS.forEach(([n, rightNatIdx]) => {
+      const btn = document.createElement('div');
+      btn.className = 'key-btn sharp';
+      if (n === state.selectedNote && oct === state.selectedKeyOctave) btn.classList.add('selected');
+      if (!isDrum && !isNoteInScale(n)) btn.classList.add('out-scale');
+      btn.textContent = n;
+      btn.dataset.note = n; btn.dataset.octave = oct;
+      btn.addEventListener('click', makeClickHandler(n, oct));
+
+      // Left edge: center sharp on boundary between adjacent naturals,
+      // shifted slightly left (standard piano proportion: ~30% into right natural)
+      const naturalRightEdgePct = (o * NATURALS.length + rightNatIdx) * natPct;
+      const leftPct = naturalRightEdgePct - sharpWPct * 0.5;
+      btn.style.left  = leftPct + '%';
+      btn.style.width = sharpWPct + '%';
+      row.appendChild(btn);
+    });
+  }
 }
 
 function updateScaleDisplay() {
@@ -1417,11 +1554,11 @@ function loadFromHash() {
 }
 
 function updateNoteDisplay() {
-  document.getElementById('octave-display').textContent = state.selectedOctave;
+  document.getElementById('octave-display').textContent = state.selectedOctave; // base octave shown in control
   const isDrum = state.channels[state.selectedChannel].type === 'noise';
   const label = isDrum
-    ? drumLabel(state.selectedNote, state.selectedOctave)
-    : state.selectedNote + state.selectedOctave;
+    ? drumLabel(state.selectedNote, state.selectedKeyOctave)
+    : state.selectedNote + state.selectedKeyOctave;
   document.getElementById('current-note-display').textContent = label;
 }
 
@@ -1496,13 +1633,13 @@ function onStepClick(e, ci, si) {
     beep(200, 0.04, 0.03);
   } else {
     // Activate with selected note
-    steps[si] = { note: state.selectedNote, octave: state.selectedOctave };
+    steps[si] = { note: state.selectedNote, octave: state.selectedKeyOctave };
     state.selectedStepIdx = { ch: ci, step: si };
     document.querySelectorAll('.step').forEach(el => el.classList.remove('selected-step'));
     e.currentTarget.classList.add('selected-step');
     renderStep(ci, si);
     updateBeatLightNotes();
-    playNote(ci, state.selectedNote, state.selectedOctave);
+    playNote(ci, state.selectedNote, state.selectedKeyOctave);
     beep(440, 0.04, 0.02);
   }
 }
@@ -1879,23 +2016,25 @@ document.getElementById('bpm-down').addEventListener('click', () => {
 });
 
 document.getElementById('oct-up').addEventListener('click', () => {
-  state.selectedOctave = Math.min(7, state.selectedOctave + 1);
-  updateNoteDisplay();
+  state.selectedOctave = Math.min(6, state.selectedOctave + 1);
+  state.selectedKeyOctave = state.selectedOctave; // keep highlight in lower octave of view
+  buildKeyboard(); updateNoteDisplay();
   if (state.selectedStepIdx) {
     const {ch,step} = state.selectedStepIdx;
     if (state.channels[ch].steps[step]) {
-      state.channels[ch].steps[step].octave = state.selectedOctave;
+      state.channels[ch].steps[step].octave = state.selectedKeyOctave;
       renderStep(ch, step);
     }
   }
 });
 document.getElementById('oct-down').addEventListener('click', () => {
   state.selectedOctave = Math.max(1, state.selectedOctave - 1);
-  updateNoteDisplay();
+  state.selectedKeyOctave = state.selectedOctave;
+  buildKeyboard(); updateNoteDisplay();
   if (state.selectedStepIdx) {
     const {ch,step} = state.selectedStepIdx;
     if (state.channels[ch].steps[step]) {
-      state.channels[ch].steps[step].octave = state.selectedOctave;
+      state.channels[ch].steps[step].octave = state.selectedKeyOctave;
       renderStep(ch, step);
     }
   }

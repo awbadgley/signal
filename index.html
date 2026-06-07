@@ -678,19 +678,42 @@ function playNote(chIdx, note, octave) {
   const now = audioCtx.currentTime;
 
   if (ch.type === 'noise') {
-    // DRUM: very short snappy hit — fast attack, punchy decay
-    const snapDur = Math.min(stepDuration * 0.18, 0.08);
-    const bufSize = Math.ceil(audioCtx.sampleRate * snapDur);
-    const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+    // DRUM: three layered voices — noise snap + pitched triangle thud.
+    // Voice selected by octave: C1-B2 = kick, C3-B4 = snare, C5+ = hi-hat.
+    const semi = NOTES.indexOf(note) + (octave - 1) * 12;
+    let snapDur, snapVol, thudFreqA, thudFreqB, thudDur, thudVol;
+    if (semi < 24) {          // KICK — deep thud, medium snap
+      snapDur = 0.045; snapVol = 0.6;
+      thudFreqA = 190; thudFreqB = 32; thudDur = 0.13; thudVol = 1.3;
+    } else if (semi < 48) {   // SNARE — bright snap, sharp crack
+      snapDur = 0.07;  snapVol = 1.1;
+      thudFreqA = 380; thudFreqB = 85; thudDur = 0.06; thudVol = 0.65;
+    } else {                  // HI-HAT — very short, mostly noise
+      snapDur = 0.022; snapVol = 0.9;
+      thudFreqA = 900; thudFreqB = 450; thudDur = 0.018; thudVol = 0.15;
+    }
+    // Noise snap layer
+    const snapSamples = Math.ceil(audioCtx.sampleRate * snapDur);
+    const buf = audioCtx.createBuffer(1, snapSamples, audioCtx.sampleRate);
     const data = buf.getChannelData(0);
-    for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+    for (let i = 0; i < snapSamples; i++) data[i] = Math.random() * 2 - 1;
     const src = audioCtx.createBufferSource();
-    const gain = audioCtx.createGain();
+    const snapGain = audioCtx.createGain();
     src.buffer = buf;
-    src.connect(gain); gain.connect(audioCtx.destination);
-    gain.gain.setValueAtTime(ch.volume, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + snapDur);
+    src.connect(snapGain); snapGain.connect(audioCtx.destination);
+    snapGain.gain.setValueAtTime(ch.volume * snapVol, now);
+    snapGain.gain.exponentialRampToValueAtTime(0.001, now + snapDur);
     src.start(now); src.stop(now + snapDur);
+    // Pitched thud layer
+    const thudOsc = audioCtx.createOscillator();
+    const thudGain = audioCtx.createGain();
+    thudOsc.type = 'triangle';
+    thudOsc.frequency.setValueAtTime(thudFreqA, now);
+    thudOsc.frequency.exponentialRampToValueAtTime(thudFreqB, now + thudDur);
+    thudOsc.connect(thudGain); thudGain.connect(audioCtx.destination);
+    thudGain.gain.setValueAtTime(ch.volume * thudVol, now);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + thudDur);
+    thudOsc.start(now); thudOsc.stop(now + thudDur);
     return;
   }
 
@@ -700,24 +723,29 @@ function playNote(chIdx, note, octave) {
   osc.connect(gain); gain.connect(audioCtx.destination);
 
   if (ch.type === 'pulse50') {
-    // LEAD: punchy attack, medium decay — sits up front in the mix
+    // LEAD: downward pitch bite on attack — NES pluck character
     osc.setPeriodicWave(pulse50Wave);
+    osc.frequency.setValueAtTime(freq * 1.5, now);
+    osc.frequency.exponentialRampToValueAtTime(freq, now + 0.018);
     gain.gain.setValueAtTime(ch.volume, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + stepDuration * 0.55);
   } else if (ch.type === 'pulse12') {
-    // PULSE: buzzy thin wave, slightly longer tail — cuts through for arpeggios
+    // PULSE: strong 2× downward sweep — classic NES "bwaoow" attack
     osc.setPeriodicWave(pulse12Wave);
+    osc.frequency.setValueAtTime(freq * 2.0, now);
+    osc.frequency.exponentialRampToValueAtTime(freq, now + 0.042);
     gain.gain.setValueAtTime(ch.volume, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + stepDuration * 0.78);
   } else {
-    // BASS (triangle): soft attack, long smooth sustain — warm sub-bass feel
+    // BASS (triangle): slight upward sweep from below — plucked bass feel
     osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq * 0.5, now);
+    osc.frequency.exponentialRampToValueAtTime(freq, now + 0.02);
     gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(ch.volume, now + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + stepDuration * 0.97);
+    gain.gain.linearRampToValueAtTime(ch.volume, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + stepDuration * 0.94);
   }
 
-  osc.frequency.setValueAtTime(freq, now);
   osc.start(now);
   osc.stop(now + stepDuration);
 }
@@ -822,7 +850,7 @@ function buildUI() {
       cell.dataset.step = s;
       if (ch.steps[s]) {
         cell.classList.add('on');
-        cell.textContent = ch.steps[s].note + ch.steps[s].octave;
+        cell.textContent = stepLabel(ci, ch.steps[s]);
       }
       cell.addEventListener('click', e => onStepClick(e, ci, s));
       cell.addEventListener('contextmenu', e => { e.preventDefault(); onStepRightClick(ci, s); });
@@ -855,8 +883,7 @@ function buildUI() {
   state.channels.forEach((ch, ci) => {
     const btn = document.createElement('button');
     btn.className = 'ch-btn' + (ci === state.selectedChannel ? ' active' : '');
-    btn.textContent = ch.name.replace(' ','↵').replace('TRIANGLE','TRI').replace('PULSE↵','P');
-    btn.textContent = ['P1','P2','TRI','NOISE'][ci];
+    btn.textContent = ['LEAD','PULSE','BASS','DRUM'][ci];
     btn.addEventListener('click', () => selectChannel(ci));
     chBtns.appendChild(btn);
   });
@@ -898,7 +925,24 @@ function buildKeyboard() {
 
 function updateNoteDisplay() {
   document.getElementById('octave-display').textContent = state.selectedOctave;
-  document.getElementById('current-note-display').textContent = state.selectedNote + state.selectedOctave;
+  const isDrum = state.channels[state.selectedChannel].type === 'noise';
+  const label = isDrum
+    ? drumLabel(state.selectedNote, state.selectedOctave)
+    : state.selectedNote + state.selectedOctave;
+  document.getElementById('current-note-display').textContent = label;
+}
+
+function drumLabel(note, octave) {
+  const semi = NOTES.indexOf(note) + (octave - 1) * 12;
+  if (semi < 24) return 'KIK';
+  if (semi < 48) return 'SNR';
+  return 'HAT';
+}
+
+function stepLabel(ci, step) {
+  if (!step) return '';
+  if (state.channels[ci].type === 'noise') return drumLabel(step.note, step.octave);
+  return step.note + step.octave;
 }
 
 function renderStep(ci, si) {
@@ -906,7 +950,7 @@ function renderStep(ci, si) {
   if (!cell) return;
   const step = state.channels[ci].steps[si];
   cell.classList.toggle('on', !!step);
-  cell.textContent = step ? (step.note + step.octave) : '';
+  cell.textContent = stepLabel(ci, step);
 }
 
 function renderPlayhead() {
@@ -1035,18 +1079,38 @@ async function exportWAV() {
       };
 
       if (ch.type === 'noise') {
-        const snapDur = Math.min(stepDur * 0.18, 0.08);
-        const bufSize = Math.ceil(sampleRate * snapDur);
-        const buf = offCtx.createBuffer(1, bufSize, sampleRate);
+        const semi = NOTES.indexOf(step.note) + (step.octave - 1) * 12;
+        let snapDur, snapVol, thudFreqA, thudFreqB, thudDur, thudVol;
+        if (semi < 24) {
+          snapDur = 0.045; snapVol = 0.6;
+          thudFreqA = 190; thudFreqB = 32; thudDur = 0.13; thudVol = 1.3;
+        } else if (semi < 48) {
+          snapDur = 0.07;  snapVol = 1.1;
+          thudFreqA = 380; thudFreqB = 85; thudDur = 0.06; thudVol = 0.65;
+        } else {
+          snapDur = 0.022; snapVol = 0.9;
+          thudFreqA = 900; thudFreqB = 450; thudDur = 0.018; thudVol = 0.15;
+        }
+        const snapSamples = Math.ceil(sampleRate * snapDur);
+        const buf = offCtx.createBuffer(1, snapSamples, sampleRate);
         const data = buf.getChannelData(0);
-        for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+        for (let i = 0; i < snapSamples; i++) data[i] = Math.random() * 2 - 1;
         const src = offCtx.createBufferSource();
-        const gain = offCtx.createGain();
+        const snapGain = offCtx.createGain();
         src.buffer = buf;
-        src.connect(gain); gain.connect(offCtx.destination);
-        gain.gain.setValueAtTime(ch.volume, startTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + snapDur);
+        src.connect(snapGain); snapGain.connect(offCtx.destination);
+        snapGain.gain.setValueAtTime(ch.volume * snapVol, startTime);
+        snapGain.gain.exponentialRampToValueAtTime(0.001, startTime + snapDur);
         src.start(startTime); src.stop(startTime + snapDur);
+        const thudOsc = offCtx.createOscillator();
+        const thudGain = offCtx.createGain();
+        thudOsc.type = 'triangle';
+        thudOsc.frequency.setValueAtTime(thudFreqA, startTime);
+        thudOsc.frequency.exponentialRampToValueAtTime(thudFreqB, startTime + thudDur);
+        thudOsc.connect(thudGain); thudGain.connect(offCtx.destination);
+        thudGain.gain.setValueAtTime(ch.volume * thudVol, startTime);
+        thudGain.gain.exponentialRampToValueAtTime(0.001, startTime + thudDur);
+        thudOsc.start(startTime); thudOsc.stop(startTime + thudDur);
       } else {
         const freq = noteToFreq(step.note, step.octave);
         const osc = offCtx.createOscillator();
@@ -1054,19 +1118,24 @@ async function exportWAV() {
         osc.connect(gain); gain.connect(offCtx.destination);
         if (ch.type === 'pulse50') {
           osc.setPeriodicWave(makeOffPulse(0.5));
+          osc.frequency.setValueAtTime(freq * 1.5, startTime);
+          osc.frequency.exponentialRampToValueAtTime(freq, startTime + 0.018);
           gain.gain.setValueAtTime(ch.volume, startTime);
           gain.gain.exponentialRampToValueAtTime(0.001, startTime + stepDur * 0.55);
         } else if (ch.type === 'pulse12') {
           osc.setPeriodicWave(makeOffPulse(0.125));
+          osc.frequency.setValueAtTime(freq * 2.0, startTime);
+          osc.frequency.exponentialRampToValueAtTime(freq, startTime + 0.042);
           gain.gain.setValueAtTime(ch.volume, startTime);
           gain.gain.exponentialRampToValueAtTime(0.001, startTime + stepDur * 0.78);
         } else {
           osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq * 0.5, startTime);
+          osc.frequency.exponentialRampToValueAtTime(freq, startTime + 0.02);
           gain.gain.setValueAtTime(0.001, startTime);
-          gain.gain.linearRampToValueAtTime(ch.volume, startTime + 0.012);
-          gain.gain.exponentialRampToValueAtTime(0.001, startTime + stepDur * 0.97);
+          gain.gain.linearRampToValueAtTime(ch.volume, startTime + 0.008);
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + stepDur * 0.94);
         }
-        osc.frequency.setValueAtTime(freq, startTime);
         osc.start(startTime); osc.stop(startTime + stepDur);
       }
     });

@@ -2156,8 +2156,6 @@ function drawVis() {
   if (visCanvas.height !== H) visCanvas.height = H;
 
   visCtx.clearRect(0, 0, W, H);
-  visCtx.fillStyle = '#000';
-  visCtx.fillRect(0, 0, W, H);
 
   analyser.getByteTimeDomainData(analyserData);
   const bufLen = analyserData.length;

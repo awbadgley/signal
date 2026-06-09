@@ -320,6 +320,47 @@
       gap:0;
     }
 
+    /* Pattern / song row */
+    #pattern-row {
+      display:flex; align-items:center; justify-content:center;
+      gap:calc(var(--u)*0.5); flex-wrap:wrap;
+    }
+    .pat-label {
+      font-family:'Silkscreen', monospace;
+      font-size:clamp(0.3rem, calc(var(--u)*0.45), 0.65rem);
+      letter-spacing:0.18em; color:#fff;
+      text-shadow:0 0 6px var(--cyan), 0 0 14px rgba(0,255,255,0.4);
+    }
+    .pat-btn {
+      padding:calc(var(--u)*0.22) calc(var(--u)*0.45);
+      border:1px solid rgba(0,255,255,0.3);
+      background:transparent; color:rgba(0,255,255,0.6);
+      font-family:'Silkscreen', monospace;
+      font-size:clamp(0.28rem, calc(var(--u)*0.42), 0.6rem);
+      cursor:pointer; transition:all 0.12s; white-space:nowrap;
+      border-radius: calc(var(--u)*0.35);
+    }
+    .pat-btn:hover { border-color:var(--cyan); color:var(--cyan); box-shadow:0 0 6px var(--cyan); }
+    .pat-btn.active {
+      border-color:var(--cyan); color:#fff; background:rgba(0,255,255,0.12);
+      box-shadow:0 0 8px var(--cyan), 0 0 18px rgba(0,255,255,0.4);
+    }
+    .pat-btn.on {
+      border-color:var(--green); color:var(--green);
+      box-shadow:0 0 6px var(--green);
+    }
+    #chain-display {
+      font-family:'Silkscreen', monospace;
+      font-size:clamp(0.3rem, calc(var(--u)*0.48), 0.7rem);
+      letter-spacing:0.25em; color:var(--amber);
+      text-shadow:0 0 6px var(--amber);
+      min-width:calc(var(--u)*4);
+    }
+    .pat-sep { width:calc(var(--u)*1); }
+
+    /* Accented steps glow brighter */
+    .step.accent.on { filter:brightness(1.6); font-weight:bold; }
+
     #left-controls { display:flex; flex-direction:column; gap:calc(var(--u)*0.55); align-items:center; }
 
     /* Section labels — small, glowing */
@@ -858,6 +899,21 @@
     <div class="rivet bl"></div>
     <div class="rivet br"></div>
 
+    <!-- Pattern / song row -->
+    <div id="pattern-row">
+      <span class="pat-label">PATTERN</span>
+      <div id="pattern-btns" style="display:flex;gap:calc(var(--u)*0.3);"><!-- built by JS --></div>
+      <button class="pat-btn" id="pat-copy" title="Copy this pattern into the next slot">COPY▸</button>
+      <span class="pat-sep"></span>
+      <button class="pat-btn" id="song-toggle" title="Play the chain instead of one pattern">SONG: OFF</button>
+      <span class="pat-label">CHAIN</span>
+      <span id="chain-display">A</span>
+      <button class="pat-btn" id="chain-add" title="Append current pattern to the chain">+</button>
+      <button class="pat-btn" id="chain-clear" title="Reset chain">✕</button>
+      <span class="pat-sep"></span>
+      <button class="pat-btn" id="arp-toggle" title="Arpeggiate the PULSE channel (C64-style chords)">ARP: OFF</button>
+    </div>
+
     <!-- Top row: 4 evenly-spaced zones -->
     <div id="control-row">
 
@@ -927,6 +983,7 @@
             <button class="sl-btn" id="btn-load">LOAD</button>
             <button class="sl-btn" id="btn-share">SHARE</button>
             <button class="sl-btn" id="btn-export">WAV</button>
+            <button class="sl-btn" id="btn-demo">DEMO</button>
           </div>
         </div>
         <div id="status-display">
@@ -973,6 +1030,13 @@ const SCALES = {
 };
 const SCALE_NAMES = Object.keys(SCALES);
 
+const NUM_PATTERNS = 4;
+const PATTERN_NAMES = ['A','B','C','D'];
+
+function blankPattern() {
+  return Array.from({ length: 4 }, () => Array(16).fill(null));
+}
+
 const state = {
   playing:   false,
   looping:   true,
@@ -986,14 +1050,21 @@ const state = {
   selectedOctave:  4,   // base octave — keyboard display, shifted by oct buttons
   selectedKeyOctave: 4, // octave of the currently highlighted key
   selectedStepIdx: null,
+  currentPattern: 0,
+  chain: [0],           // pattern indices played in order when songMode is on
+  songMode: false,
+  arpOn: false,         // arpeggiate PULSE channel
+  patterns: [blankPattern(), blankPattern(), blankPattern(), blankPattern()],
   channels: [
-    { name:'LEAD',  type:'pulse50',  muted:false, volume:0.25, steps: Array(16).fill(null) },
-    { name:'PULSE', type:'pulse12',  muted:false, volume:0.22, steps: Array(16).fill(null) },
-    { name:'BASS',  type:'triangle', muted:false, volume:0.35, steps: Array(16).fill(null) },
-    { name:'DRUM',  type:'noise',    muted:false, volume:0.2,  steps: Array(16).fill(null) },
+    { name:'LEAD',  type:'pulse50',  muted:false, volume:0.25, echo:0.9,  steps: null },
+    { name:'PULSE', type:'pulse12',  muted:false, volume:0.22, echo:0.7,  steps: null },
+    { name:'BASS',  type:'triangle', muted:false, volume:0.35, echo:0.12, steps: null },
+    { name:'DRUM',  type:'noise',    muted:false, volume:0.2,  echo:0,    steps: null },
   ]
 };
-// step value: null = empty, { note:'C', octave:4 }
+// step value: null = empty, { note:'C', octave:4, acc?:true }
+// ch.steps is a live reference into state.patterns[state.currentPattern][ci]
+state.channels.forEach((ch, ci) => { ch.steps = state.patterns[0][ci]; });
 
 function isNoteInScale(note) {
   if (state.scale === 'CHROMATIC') return true;
@@ -1032,6 +1103,27 @@ const echoSend = audioCtx.createGain();
 echoSend.gain.value = 1.0;
 echoSend.connect(echoDelay);
 
+// Soft plate reverb — generated impulse, fed from the echo send for diffuse space
+function makeImpulse(ctx, dur = 1.8, decay = 2.8) {
+  const rate = ctx.sampleRate;
+  const len = Math.ceil(rate * dur);
+  const buf = ctx.createBuffer(2, len, rate);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
+  }
+  return buf;
+}
+const reverb = audioCtx.createConvolver();
+reverb.buffer = makeImpulse(audioCtx);
+const reverbWet = audioCtx.createGain();
+reverbWet.gain.value = 0.16;
+echoSend.connect(reverb);
+reverb.connect(reverbWet);
+reverbWet.connect(masterGain);
+
 // Build a PeriodicWave for a given pulse duty cycle (0–1).
 function createPulseWave(duty) {
   const n = 256;
@@ -1045,16 +1137,30 @@ function createPulseWave(duty) {
 const pulse50Wave = createPulseWave(0.5);    // LEAD  — warm, full square
 const pulse12Wave = createPulseWave(0.125);  // PULSE — buzzy, very thin
 
+// FX bundle for live playback (offline export builds its own mirror)
+const liveFx = { echoIn: echoSend, pulse50: pulse50Wave, pulse12: pulse12Wave };
+
 function noteToFreq(note, octave) {
   const semi = NOTES.indexOf(note) + (octave - 4) * 12;
   return 440 * Math.pow(2, (semi - 9) / 12); // A4=440
 }
 
-function playNote(chIdx, note, octave, atTime) {
+// Per-channel energy for the visualizer (decays each frame)
+const chanEnergy = [0, 0, 0, 0];
+
+function playNote(chIdx, note, octave, atTime, accent) {
   const ch = state.channels[chIdx];
   if (ch.muted) return;
   const stepDuration = 60 / state.bpm / 4;
   const now = atTime !== undefined ? atTime : audioCtx.currentTime;
+  chanEnergy[chIdx] = accent ? 1.3 : 1;
+  synthesizeNote(audioCtx, masterGain, liveFx, ch, note, octave, now, stepDuration, accent);
+}
+
+// Context-agnostic synthesis — used for both live playback and offline WAV export.
+// fx = { echoIn: per-context echo input node (or null), pulse50, pulse12: PeriodicWaves }
+function synthesizeNote(ctx, out, fx, ch, note, octave, now, stepDuration, accent) {
+  const vel = accent ? 1.45 : 1;
 
   if (ch.type === 'noise') {
     const semi = NOTES.indexOf(note) + (octave - 1) * 12;
@@ -1069,24 +1175,24 @@ function playNote(chIdx, note, octave, atTime) {
       snapDur = 0.028; snapVol = 1.1;
       thudFreqA = 1100; thudFreqB = 600; thudDur = 0.022; thudVol = 0.12;
     }
-    const snapSamples = Math.ceil(audioCtx.sampleRate * snapDur);
-    const buf = audioCtx.createBuffer(1, snapSamples, audioCtx.sampleRate);
+    const snapSamples = Math.ceil(ctx.sampleRate * snapDur);
+    const buf = ctx.createBuffer(1, snapSamples, ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < snapSamples; i++) data[i] = Math.random() * 2 - 1;
-    const src = audioCtx.createBufferSource();
-    const snapGain = audioCtx.createGain();
+    const src = ctx.createBufferSource();
+    const snapGain = ctx.createGain();
     src.buffer = buf;
-    src.connect(snapGain); snapGain.connect(masterGain);
-    snapGain.gain.setValueAtTime(ch.volume * snapVol, now);
+    src.connect(snapGain); snapGain.connect(out);
+    snapGain.gain.setValueAtTime(ch.volume * snapVol * vel, now);
     snapGain.gain.exponentialRampToValueAtTime(0.001, now + snapDur);
     src.start(now); src.stop(now + snapDur);
-    const thudOsc = audioCtx.createOscillator();
-    const thudGain = audioCtx.createGain();
+    const thudOsc = ctx.createOscillator();
+    const thudGain = ctx.createGain();
     thudOsc.type = 'triangle';
     thudOsc.frequency.setValueAtTime(thudFreqA, now);
     thudOsc.frequency.exponentialRampToValueAtTime(thudFreqB, now + thudDur);
-    thudOsc.connect(thudGain); thudGain.connect(masterGain);
-    thudGain.gain.setValueAtTime(ch.volume * thudVol, now);
+    thudOsc.connect(thudGain); thudGain.connect(out);
+    thudGain.gain.setValueAtTime(ch.volume * thudVol * vel, now);
     thudGain.gain.exponentialRampToValueAtTime(0.001, now + thudDur);
     thudOsc.start(now); thudOsc.stop(now + thudDur);
     return;
@@ -1095,15 +1201,25 @@ function playNote(chIdx, note, octave, atTime) {
   const freq = noteToFreq(note, octave);
   const noteDur = stepDuration;
 
+  // Per-channel echo send level
+  function connectVoice(gainNode) {
+    gainNode.connect(out);
+    if (fx.echoIn && ch.echo > 0) {
+      const send = ctx.createGain();
+      send.gain.value = ch.echo;
+      gainNode.connect(send);
+      send.connect(fx.echoIn);
+    }
+  }
+
   if (ch.type === 'pulse50') {
     // ── LEAD: detuned dual-oscillator square → classic 80s synth chorus ──
-    const gainNode = audioCtx.createGain();
-    gainNode.connect(echoSend);
-    gainNode.connect(masterGain);
+    const gainNode = ctx.createGain();
+    connectVoice(gainNode);
     // Two oscillators slightly detuned for thickness
     [0, 7].forEach(centOffset => {
-      const o = audioCtx.createOscillator();
-      o.setPeriodicWave(pulse50Wave);
+      const o = ctx.createOscillator();
+      o.setPeriodicWave(fx.pulse50);
       const detune = centOffset; // 0 and +7 cents
       o.frequency.setValueAtTime(freq * Math.pow(2, detune/1200) * 1.004, now);
       o.frequency.exponentialRampToValueAtTime(freq * Math.pow(2, detune/1200), now + 0.022);
@@ -1111,38 +1227,55 @@ function playNote(chIdx, note, octave, atTime) {
       o.start(now); o.stop(now + noteDur);
     });
     // Attack snap, then sustain with slight mid-decay
-    gainNode.gain.setValueAtTime(ch.volume * 1.1, now);
-    gainNode.gain.setValueAtTime(ch.volume * 0.75, now + 0.04);
+    gainNode.gain.setValueAtTime(ch.volume * 1.1 * vel, now);
+    gainNode.gain.setValueAtTime(ch.volume * 0.75 * vel, now + 0.04);
     gainNode.gain.exponentialRampToValueAtTime(0.001, now + noteDur * 0.72);
 
   } else if (ch.type === 'pulse12') {
-    // ── PULSE: thin buzz + harmony fifth → SID chip / early synthesizer ──
-    const gainNode = audioCtx.createGain();
-    gainNode.connect(echoSend);
-    gainNode.connect(masterGain);
-    // Main pulse osc with pitch-drop attack
-    const osc = audioCtx.createOscillator();
-    osc.setPeriodicWave(pulse12Wave);
-    osc.frequency.setValueAtTime(freq * 1.8, now);
-    osc.frequency.exponentialRampToValueAtTime(freq, now + 0.025);
+    // ── PULSE: thin buzz → SID chip. With ARP on: rapid root/3rd/5th cycle ──
+    const gainNode = ctx.createGain();
+    connectVoice(gainNode);
+    const osc = ctx.createOscillator();
+    osc.setPeriodicWave(fx.pulse12);
+
+    if (state.arpOn) {
+      // Classic C64 arpeggio: cycle root → 3rd → 5th every 1/6 of the step.
+      // Use major or minor 3rd depending on which fits the current scale.
+      const rootIdx = NOTES.indexOf(note);
+      const majThird = NOTES[(rootIdx + 4) % 12];
+      const third = isNoteInScale(majThird) ? 4 : 3;
+      const offsets = [0, third, 7];
+      const slice = noteDur / 6;
+      for (let i = 0; i < 6; i++) {
+        const f = freq * Math.pow(2, offsets[i % 3] / 12);
+        osc.frequency.setValueAtTime(f, now + i * slice);
+      }
+    } else {
+      // Pitch-drop attack
+      osc.frequency.setValueAtTime(freq * 1.8, now);
+      osc.frequency.exponentialRampToValueAtTime(freq, now + 0.025);
+    }
     osc.connect(gainNode);
     osc.start(now); osc.stop(now + noteDur);
-    // Second osc at 50% duty (fuller) detuned +5 cents for width
-    const osc2 = audioCtx.createOscillator();
-    const osc2Gain = audioCtx.createGain();
-    osc2.setPeriodicWave(pulse50Wave);
-    osc2.frequency.setValueAtTime(freq * Math.pow(2, 5/1200), now);
-    osc2Gain.gain.value = 0.45;
-    osc2.connect(osc2Gain); osc2Gain.connect(gainNode);
-    osc2.start(now); osc2.stop(now + noteDur);
+
+    // Second osc at 50% duty (fuller) detuned +5 cents for width — skip in arp mode
+    if (!state.arpOn) {
+      const osc2 = ctx.createOscillator();
+      const osc2Gain = ctx.createGain();
+      osc2.setPeriodicWave(fx.pulse50);
+      osc2.frequency.setValueAtTime(freq * Math.pow(2, 5/1200), now);
+      osc2Gain.gain.value = 0.45;
+      osc2.connect(osc2Gain); osc2Gain.connect(gainNode);
+      osc2.start(now); osc2.stop(now + noteDur);
+    }
     // Boosted volume — thin pulse needs extra gain to cut through
-    gainNode.gain.setValueAtTime(ch.volume * 1.6, now);
-    gainNode.gain.setValueAtTime(ch.volume * 1.1, now + 0.035);
+    gainNode.gain.setValueAtTime(ch.volume * 1.6 * vel, now);
+    gainNode.gain.setValueAtTime(ch.volume * 1.1 * vel, now + 0.035);
     gainNode.gain.exponentialRampToValueAtTime(0.001, now + noteDur * 0.85);
 
   } else {
     // ── BASS: sawtooth + low-pass filter sweep → Moog-style synth bass ──
-    const filter = audioCtx.createBiquadFilter();
+    const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.Q.value = 4.5;
     // Filter sweeps from bright to dark — classic Moog envelope
@@ -1150,26 +1283,27 @@ function playNote(chIdx, note, octave, atTime) {
     filter.frequency.exponentialRampToValueAtTime(freq * 2.2, now + noteDur * 0.35);
     filter.frequency.exponentialRampToValueAtTime(freq * 1.1, now + noteDur * 0.9);
 
-    const gainNode = audioCtx.createGain();
-    filter.connect(gainNode); gainNode.connect(masterGain);
+    const gainNode = ctx.createGain();
+    filter.connect(gainNode);
+    connectVoice(gainNode);
 
     // Main sawtooth
-    const osc = audioCtx.createOscillator();
+    const osc = ctx.createOscillator();
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(freq, now);
     osc.connect(filter);
     osc.start(now); osc.stop(now + noteDur);
 
     // Sub-oscillator one octave below for body
-    const sub = audioCtx.createOscillator();
-    const subGain = audioCtx.createGain();
+    const sub = ctx.createOscillator();
+    const subGain = ctx.createGain();
     sub.type = 'sine'; sub.frequency.value = freq * 0.5;
     subGain.gain.value = 0.55;
     sub.connect(subGain); subGain.connect(gainNode);
     sub.start(now); sub.stop(now + noteDur);
 
     gainNode.gain.setValueAtTime(0.001, now);
-    gainNode.gain.linearRampToValueAtTime(ch.volume * 1.15, now + 0.012);
+    gainNode.gain.linearRampToValueAtTime(ch.volume * 1.15 * vel, now + 0.012);
     gainNode.gain.exponentialRampToValueAtTime(0.001, now + noteDur * 0.92);
   }
 }
@@ -1190,18 +1324,24 @@ function beep(freq, dur, vol=0.08) {
 let stepTimer = null;
 let nextStepTime = 0;
 let scheduledStep = 0;
+let chainPos = 0;
+let firstBar = true;
 
 function startPlaying() {
   audioCtx.resume();
   state.playing = true;
   state.currentStep = 0;
   scheduledStep = 0;
+  chainPos = 0;
+  firstBar = true;
+  // Song mode starts at the head of the chain
+  if (state.songMode && state.chain.length) setPattern(state.chain[0]);
   nextStepTime = audioCtx.currentTime + 0.05;
   scheduleLoop();
   document.getElementById('btn-play').classList.add('active');
   document.getElementById('playstate-text').textContent = '▶ PLAYING';
   document.getElementById('playstate-text').classList.add('playing');
-  setStatus('PLAYING...');
+  setStatus(state.songMode ? 'PLAYING CHAIN...' : 'PLAYING...');
 }
 
 function scheduleLoop() {
@@ -1211,12 +1351,26 @@ function scheduleLoop() {
 
   while (nextStepTime < audioCtx.currentTime + lookAhead) {
     const s = scheduledStep;
+
+    // Bar boundary: advance the chain in song mode
+    if (s === 0) {
+      if (!firstBar && state.songMode && state.chain.length) {
+        chainPos = (chainPos + 1) % state.chain.length;
+        const nextPat = state.chain[chainPos];
+        const timeUntilBar = (nextStepTime - audioCtx.currentTime) * 1000;
+        setTimeout(() => { if (state.playing) setPattern(nextPat); }, Math.max(0, timeUntilBar));
+        // Switch data refs now so this bar's notes come from the right pattern
+        state.channels.forEach((ch, ci) => { ch.steps = state.patterns[nextPat][ci]; });
+      }
+      firstBar = false;
+    }
+
     // Swing: delay odd steps
     const swingOffset = (s % 2 === 1) ? stepDur * state.swing * 0.5 : 0;
     const noteTime = nextStepTime + swingOffset;
 
     state.channels.forEach((ch, ci) => {
-      if (ch.steps[s]) playNote(ci, ch.steps[s].note, ch.steps[s].octave, noteTime);
+      if (ch.steps[s]) playNote(ci, ch.steps[s].note, ch.steps[s].octave, noteTime, ch.steps[s].acc);
     });
 
     const timeUntil = (nextStepTime - audioCtx.currentTime) * 1000;
@@ -1232,7 +1386,9 @@ function scheduleLoop() {
     scheduledStep = (scheduledStep + 1) % 16;
     nextStepTime += stepDur;
 
-    if (scheduledStep === 0 && !state.looping) {
+    // One-shot mode: stop at the end of the pattern (or end of the chain)
+    if (scheduledStep === 0 && !state.looping &&
+        (!state.songMode || chainPos === state.chain.length - 1)) {
       setTimeout(stopPlaying, (nextStepTime - audioCtx.currentTime) * 1000);
       return;
     }
@@ -1286,6 +1442,7 @@ function buildUI() {
       cell.dataset.step = s;
       if (ch.steps[s]) {
         cell.classList.add('on');
+        if (ch.steps[s].acc) cell.classList.add('accent');
         cell.textContent = stepLabel(ci, ch.steps[s]);
       }
       cell.addEventListener('click', e => onStepClick(e, ci, s));
@@ -1329,6 +1486,7 @@ function buildUI() {
   buildKeyboard();
   updateNoteDisplay();
   buildBeatLights();
+  renderPatternRow();
 }
 
 function buildBeatLights() {
@@ -1480,6 +1638,51 @@ function randomFill() {
   setStatus('RANDOM FILL: ' + ch.name);
 }
 
+// ── Demo song ─────────────────────────────────────────────────────────────────
+function loadDemo() {
+  const N = (note, octave, acc) => acc ? { note, octave, acc: true } : { note, octave };
+  const lane = (entries) => {
+    const arr = Array(16).fill(null);
+    entries.forEach(([s, step]) => { arr[s] = step; });
+    return arr;
+  };
+  // Drum voices: octave 1 = kick, 3 = snare, 5 = hat
+  const KICK = o => N('C', 1, o), SNARE = () => N('C', 3), HAT = () => N('C', 5);
+
+  // Pattern A — main groove
+  state.patterns[0] = [
+    lane([[0,N('G',4)],[3,N('E',4)],[6,N('D',4)],[8,N('C',4)],[11,N('D',4)],[14,N('E',4,true)]]),   // LEAD
+    lane([[2,N('E',5)],[6,N('G',5)],[10,N('A',5)],[14,N('G',5)]]),                                   // PULSE
+    lane([[0,N('C',2,true)],[3,N('C',2)],[6,N('G',2)],[8,N('C',2,true)],[11,N('C',2)],[14,N('A',2)]]), // BASS
+    lane([[0,KICK(true)],[2,HAT()],[4,SNARE()],[6,HAT()],[8,KICK()],[10,HAT()],[12,SNARE()],[14,HAT()]]), // DRUM
+  ];
+  // Pattern B — variation, lead climbs and bass walks
+  state.patterns[1] = [
+    lane([[0,N('E',4)],[3,N('G',4)],[6,N('A',4)],[8,N('G',4,true)],[10,N('E',4)],[12,N('D',4)],[14,N('C',4)]]),
+    lane([[2,N('C',5)],[6,N('E',5)],[10,N('G',5)],[13,N('A',5)],[14,N('G',5)]]),
+    lane([[0,N('C',2,true)],[3,N('C',2)],[6,N('A',1)],[8,N('D',2,true)],[11,N('D',2)],[14,N('G',2)]]),
+    lane([[0,KICK(true)],[2,HAT()],[4,SNARE()],[6,HAT()],[8,KICK()],[10,HAT()],[11,KICK()],[12,SNARE()],[14,HAT()]]),
+  ];
+  state.patterns[2] = blankPattern();
+  state.patterns[3] = blankPattern();
+
+  state.bpm = 118;
+  state.swing = 0.1;
+  state.scale = 'PENTA';
+  state.scaleRoot = 'C';
+  state.arpOn = true;
+  state.songMode = true;
+  state.chain = [0, 0, 1, 1];
+
+  document.getElementById('bpm-display').textContent = state.bpm;
+  document.getElementById('swing-display').textContent = Math.round(state.swing * 100) + '%';
+  setPattern(0);
+  buildUI();
+  updateScaleDisplay();
+  setStatus('DEMO LOADED — PRESS PLAY!');
+  beep(523, 0.06); setTimeout(() => beep(659, 0.06), 70); setTimeout(() => beep(784, 0.06), 140); setTimeout(() => beep(1047, 0.12), 210);
+}
+
 // ── Tap Tempo ─────────────────────────────────────────────────────────────────
 let tapTimes = [];
 function tapTempo() {
@@ -1499,19 +1702,71 @@ function tapTempo() {
 }
 
 // ── Share / URL ───────────────────────────────────────────────────────────────
-function encodePattern() {
-  const data = {
+// Compact step encoding: '.' = empty, 'C4' = note, 'C4!' = accented note
+function encodeStep(s) { return s ? s.note + s.octave + (s.acc ? '!' : '') : '.'; }
+function decodeStep(str) {
+  if (str === '.' || !str) return null;
+  const acc = str.endsWith('!');
+  const body = acc ? str.slice(0, -1) : str;
+  const octave = parseInt(body.slice(-1));
+  if (isNaN(octave)) return null;
+  const step = { note: body.slice(0, -1), octave };
+  if (acc) step.acc = true;
+  return step;
+}
+
+function serializeSong() {
+  return {
+    v: 2,
     bpm: state.bpm,
     swing: state.swing,
     scale: state.scale,
     scaleRoot: state.scaleRoot,
-    channels: state.channels.map(ch => ({
-      volume: ch.volume,
-      muted: ch.muted,
-      steps: ch.steps.map(s => s ? s.note + s.octave : '.')
-    }))
+    arpOn: state.arpOn,
+    songMode: state.songMode,
+    chain: state.chain.slice(),
+    channels: state.channels.map(ch => ({ volume: ch.volume, muted: ch.muted })),
+    patterns: state.patterns.map(pat => pat.map(chSteps => chSteps.map(encodeStep)))
   };
-  return btoa(JSON.stringify(data));
+}
+
+function deserializeSong(data) {
+  state.bpm = data.bpm || 120;
+  state.swing = data.swing || 0;
+  if (data.scale) state.scale = data.scale;
+  if (data.scaleRoot) state.scaleRoot = data.scaleRoot;
+
+  if (data.v === 2) {
+    state.arpOn = !!data.arpOn;
+    state.songMode = !!data.songMode;
+    state.chain = (data.chain && data.chain.length) ? data.chain.slice() : [0];
+    data.channels.forEach((saved, ci) => {
+      if (!state.channels[ci]) return;
+      state.channels[ci].volume = saved.volume;
+      state.channels[ci].muted  = saved.muted;
+    });
+    data.patterns.forEach((pat, pi) => {
+      if (pi >= NUM_PATTERNS) return;
+      pat.forEach((chSteps, ci) => {
+        state.patterns[pi][ci] = chSteps.map(s =>
+          typeof s === 'string' ? decodeStep(s) : s);
+      });
+    });
+  } else if (data.channels) {
+    // v1 format: single pattern, steps under channels (strings or raw objects)
+    data.channels.forEach((saved, ci) => {
+      if (!state.channels[ci]) return;
+      state.channels[ci].volume = saved.volume;
+      state.channels[ci].muted  = saved.muted;
+      state.patterns[0][ci] = saved.steps.map(s =>
+        typeof s === 'string' ? decodeStep(s) : s);
+    });
+  }
+  setPattern(state.songMode && state.chain.length ? state.chain[0] : 0);
+}
+
+function encodePattern() {
+  return btoa(JSON.stringify(serializeSong()));
 }
 
 function sharePattern() {
@@ -1529,25 +1784,8 @@ function loadFromHash() {
   const hash = window.location.hash.slice(1);
   if (!hash) return;
   try {
-    const data = JSON.parse(atob(hash));
-    if (data.bpm) state.bpm = data.bpm;
-    if (data.swing !== undefined) state.swing = data.swing;
-    if (data.scale) state.scale = data.scale;
-    if (data.scaleRoot) state.scaleRoot = data.scaleRoot;
-    if (data.channels) {
-      data.channels.forEach((saved, ci) => {
-        if (!state.channels[ci]) return;
-        state.channels[ci].volume = saved.volume;
-        state.channels[ci].muted  = saved.muted;
-        state.channels[ci].steps  = saved.steps.map(s => {
-          if (s === '.') return null;
-          const note = s.slice(0, s.length - 1);
-          const octave = parseInt(s.slice(-1));
-          return isNaN(octave) ? null : { note, octave };
-        });
-      });
-    }
-    setStatus('PATTERN LOADED FROM URL.');
+    deserializeSong(JSON.parse(atob(hash)));
+    setStatus('SONG LOADED FROM URL.');
   } catch(e) {
     // ignore malformed hash
   }
@@ -1580,7 +1818,52 @@ function renderStep(ci, si) {
   if (!cell) return;
   const step = state.channels[ci].steps[si];
   cell.classList.toggle('on', !!step);
+  cell.classList.toggle('accent', !!(step && step.acc));
   cell.textContent = stepLabel(ci, step);
+}
+
+// ── Patterns & song chain ─────────────────────────────────────────────────────
+function setPattern(p) {
+  state.currentPattern = p;
+  state.channels.forEach((ch, ci) => { ch.steps = state.patterns[p][ci]; });
+  state.selectedStepIdx = null;
+  document.querySelectorAll('.step').forEach(el => el.classList.remove('selected-step'));
+  for (let ci = 0; ci < 4; ci++) for (let si = 0; si < 16; si++) renderStep(ci, si);
+  updateBeatLightNotes();
+  renderPatternRow();
+}
+
+function copyPatternToNext() {
+  const src = state.currentPattern;
+  const dst = (src + 1) % NUM_PATTERNS;
+  state.patterns[dst] = state.patterns[src].map(chSteps =>
+    chSteps.map(s => s ? { ...s } : null)
+  );
+  setPattern(dst);
+  setStatus(`COPIED ${PATTERN_NAMES[src]} → ${PATTERN_NAMES[dst]}`);
+  beep(659, 0.05); setTimeout(() => beep(880, 0.08), 60);
+}
+
+function renderPatternRow() {
+  const wrap = document.getElementById('pattern-btns');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  PATTERN_NAMES.forEach((name, pi) => {
+    const btn = document.createElement('button');
+    btn.className = 'pat-btn' + (pi === state.currentPattern ? ' active' : '');
+    btn.textContent = name;
+    btn.title = `Edit pattern ${name} (Shift+${pi + 1})`;
+    btn.addEventListener('click', () => { setPattern(pi); setStatus('PATTERN: ' + name); });
+    wrap.appendChild(btn);
+  });
+  document.getElementById('chain-display').textContent =
+    state.chain.map(p => PATTERN_NAMES[p]).join(' ');
+  const songBtn = document.getElementById('song-toggle');
+  songBtn.textContent = 'SONG: ' + (state.songMode ? 'ON' : 'OFF');
+  songBtn.classList.toggle('on', state.songMode);
+  const arpBtn = document.getElementById('arp-toggle');
+  arpBtn.textContent = 'ARP: ' + (state.arpOn ? 'ON' : 'OFF');
+  arpBtn.classList.toggle('on', state.arpOn);
 }
 
 function renderPlayhead() {
@@ -1620,6 +1903,20 @@ function toggleMute(ci) {
 function onStepClick(e, ci, si) {
   selectChannel(ci);
   const steps = state.channels[ci].steps;
+
+  // Shift-click: toggle accent on an existing step (or create an accented one)
+  if (e.shiftKey) {
+    if (steps[si]) {
+      steps[si].acc = !steps[si].acc;
+    } else {
+      steps[si] = { note: state.selectedNote, octave: state.selectedKeyOctave, acc: true };
+    }
+    renderStep(ci, si);
+    updateBeatLightNotes();
+    playNote(ci, steps[si].note, steps[si].octave, undefined, steps[si].acc);
+    setStatus(steps[si].acc ? 'ACCENT ON' : 'ACCENT OFF');
+    return;
+  }
 
   if (steps[si]) {
     // Already on — toggle it off
@@ -1662,15 +1959,7 @@ function setStatus(msg) {
 
 // ── Save / Load ───────────────────────────────────────────────────────────────
 function saveToStorage() {
-  const data = {
-    bpm: state.bpm,
-    channels: state.channels.map(ch => ({
-      volume: ch.volume,
-      muted: ch.muted,
-      steps: ch.steps
-    }))
-  };
-  localStorage.setItem('chiptune-composer-save', JSON.stringify(data));
+  localStorage.setItem('chiptune-composer-save', JSON.stringify(serializeSong()));
   setStatus('SAVED TO MEMORY.');
   beep(523, 0.05); setTimeout(() => beep(659, 0.05), 60); setTimeout(() => beep(784, 0.1), 120);
 }
@@ -1679,15 +1968,11 @@ function loadFromStorage() {
   const raw = localStorage.getItem('chiptune-composer-save');
   if (!raw) { setStatus('NO SAVE FOUND.'); return; }
   try {
-    const data = JSON.parse(raw);
-    state.bpm = data.bpm || 120;
-    data.channels.forEach((saved, ci) => {
-      state.channels[ci].volume = saved.volume;
-      state.channels[ci].muted  = saved.muted;
-      state.channels[ci].steps  = saved.steps;
-    });
+    deserializeSong(JSON.parse(raw));
     document.getElementById('bpm-display').textContent = state.bpm;
+    document.getElementById('swing-display').textContent = Math.round(state.swing * 100) + '%';
     buildUI();
+    updateScaleDisplay();
     setStatus('LOADED FROM MEMORY.');
     beep(784, 0.05); setTimeout(() => beep(659, 0.05), 60); setTimeout(() => beep(523, 0.1), 120);
   } catch(e) {
@@ -1696,97 +1981,62 @@ function loadFromStorage() {
 }
 
 // ── Export (WAV via OfflineAudioContext) ──────────────────────────────────────
+// Renders through the same synthesizeNote engine as live playback, including
+// the echo/reverb chain, so the export matches what you hear.
 async function exportWAV() {
   setStatus('RENDERING...');
-  const steps = 16;
+  const bars = (state.songMode && state.chain.length) ? state.chain : [state.currentPattern];
   const stepDur = 60 / state.bpm / 4;
-  const totalDur = stepDur * steps;
+  const tail = 1.6; // let echo/reverb ring out
+  const totalDur = stepDur * 16 * bars.length + tail;
   const sampleRate = 44100;
   const offCtx = new OfflineAudioContext(1, Math.ceil(sampleRate * totalDur), sampleRate);
 
-  for (let s = 0; s < steps; s++) {
-    const startTime = s * stepDur;
-    state.channels.forEach((ch, ci) => {
-      const step = ch.steps[s];
-      if (!step || ch.muted) return;
+  // Mirror the live master + echo + reverb chain
+  const master = offCtx.createGain();
+  master.gain.value = 0.85;
+  master.connect(offCtx.destination);
 
-      const makeOffPulse = (duty) => {
-        const im = new Float32Array(256);
-        for (let k = 1; k < 256; k++) im[k] = (2 / (k * Math.PI)) * Math.sin(k * Math.PI * duty);
-        return offCtx.createPeriodicWave(new Float32Array(256), im);
-      };
+  const dly = offCtx.createDelay(1.0);
+  dly.delayTime.value = 0.19;
+  const fb = offCtx.createGain(); fb.gain.value = 0.28;
+  const wet = offCtx.createGain(); wet.gain.value = 0.22;
+  dly.connect(fb); fb.connect(dly); dly.connect(wet); wet.connect(master);
+  const echoIn = offCtx.createGain();
+  echoIn.connect(dly);
 
-      if (ch.type === 'noise') {
-        const semi = NOTES.indexOf(step.note) + (step.octave - 1) * 12;
-        let snapDur, snapVol, thudFreqA, thudFreqB, thudDur, thudVol;
-        if (semi < 24) {
-          snapDur = 0.045; snapVol = 0.6;
-          thudFreqA = 190; thudFreqB = 32; thudDur = 0.13; thudVol = 1.3;
-        } else if (semi < 48) {
-          snapDur = 0.07;  snapVol = 1.1;
-          thudFreqA = 380; thudFreqB = 85; thudDur = 0.06; thudVol = 0.65;
-        } else {
-          snapDur = 0.022; snapVol = 0.9;
-          thudFreqA = 900; thudFreqB = 450; thudDur = 0.018; thudVol = 0.15;
-        }
-        const snapSamples = Math.ceil(sampleRate * snapDur);
-        const buf = offCtx.createBuffer(1, snapSamples, sampleRate);
-        const data = buf.getChannelData(0);
-        for (let i = 0; i < snapSamples; i++) data[i] = Math.random() * 2 - 1;
-        const src = offCtx.createBufferSource();
-        const snapGain = offCtx.createGain();
-        src.buffer = buf;
-        src.connect(snapGain); snapGain.connect(offCtx.destination);
-        snapGain.gain.setValueAtTime(ch.volume * snapVol, startTime);
-        snapGain.gain.exponentialRampToValueAtTime(0.001, startTime + snapDur);
-        src.start(startTime); src.stop(startTime + snapDur);
-        const thudOsc = offCtx.createOscillator();
-        const thudGain = offCtx.createGain();
-        thudOsc.type = 'triangle';
-        thudOsc.frequency.setValueAtTime(thudFreqA, startTime);
-        thudOsc.frequency.exponentialRampToValueAtTime(thudFreqB, startTime + thudDur);
-        thudOsc.connect(thudGain); thudGain.connect(offCtx.destination);
-        thudGain.gain.setValueAtTime(ch.volume * thudVol, startTime);
-        thudGain.gain.exponentialRampToValueAtTime(0.001, startTime + thudDur);
-        thudOsc.start(startTime); thudOsc.stop(startTime + thudDur);
-      } else {
-        const freq = noteToFreq(step.note, step.octave);
-        const osc = offCtx.createOscillator();
-        const gain = offCtx.createGain();
-        osc.connect(gain); gain.connect(offCtx.destination);
-        if (ch.type === 'pulse50') {
-          osc.setPeriodicWave(makeOffPulse(0.5));
-          osc.frequency.setValueAtTime(freq * 1.5, startTime);
-          osc.frequency.exponentialRampToValueAtTime(freq, startTime + 0.018);
-          gain.gain.setValueAtTime(ch.volume, startTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, startTime + stepDur * 0.55);
-        } else if (ch.type === 'pulse12') {
-          osc.setPeriodicWave(makeOffPulse(0.125));
-          osc.frequency.setValueAtTime(freq * 2.0, startTime);
-          osc.frequency.exponentialRampToValueAtTime(freq, startTime + 0.042);
-          gain.gain.setValueAtTime(ch.volume, startTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, startTime + stepDur * 0.78);
-        } else {
-          osc.type = 'triangle';
-          osc.frequency.setValueAtTime(freq * 0.5, startTime);
-          osc.frequency.exponentialRampToValueAtTime(freq, startTime + 0.02);
-          gain.gain.setValueAtTime(0.001, startTime);
-          gain.gain.linearRampToValueAtTime(ch.volume, startTime + 0.008);
-          gain.gain.exponentialRampToValueAtTime(0.001, startTime + stepDur * 0.94);
-        }
-        osc.start(startTime); osc.stop(startTime + stepDur);
-      }
-    });
-  }
+  const rvb = offCtx.createConvolver();
+  rvb.buffer = makeImpulse(offCtx);
+  const rvbWet = offCtx.createGain(); rvbWet.gain.value = 0.16;
+  echoIn.connect(rvb); rvb.connect(rvbWet); rvbWet.connect(master);
+
+  const makeOffPulse = (duty) => {
+    const im = new Float32Array(256);
+    for (let k = 1; k < 256; k++) im[k] = (2 / (k * Math.PI)) * Math.sin(k * Math.PI * duty);
+    return offCtx.createPeriodicWave(new Float32Array(256), im);
+  };
+  const fx = { echoIn, pulse50: makeOffPulse(0.5), pulse12: makeOffPulse(0.125) };
+
+  bars.forEach((pi, bi) => {
+    for (let s = 0; s < 16; s++) {
+      const swingOffset = (s % 2 === 1) ? stepDur * state.swing * 0.5 : 0;
+      const t = (bi * 16 + s) * stepDur + swingOffset;
+      state.channels.forEach((ch, ci) => {
+        const step = state.patterns[pi][ci][s];
+        if (!step || ch.muted) return;
+        synthesizeNote(offCtx, master, fx, ch, step.note, step.octave, t, stepDur, step.acc);
+      });
+    }
+  });
 
   const rendered = await offCtx.startRendering();
   const wav = audioBufferToWav(rendered);
   const blob = new Blob([wav], { type: 'audio/wav' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'chiptune.wav'; a.click();
+  a.href = url; a.download = 'vektr.wav'; a.click();
   URL.revokeObjectURL(url);
-  setStatus('EXPORTED WAV.');
+  setStatus('EXPORTED WAV' + (bars.length > 1 ? ` (${bars.length} BARS).` : '.'));
 }
 
 function audioBufferToWav(buffer) {
@@ -1829,6 +2079,15 @@ function drawVis() {
   analyser.getByteTimeDomainData(analyserData);
   const bufLen = analyserData.length;
 
+  // Glow tracks whichever channel fired most recently (decaying energy)
+  const CH_COLORS = ['#ff00ff', '#00ffff', '#39ff14', '#ffaa00'];
+  let domCh = -1, domE = 0.08;
+  for (let c = 0; c < 4; c++) {
+    if (chanEnergy[c] > domE) { domE = chanEnergy[c]; domCh = c; }
+    chanEnergy[c] *= 0.94;
+  }
+  const glowColor = domCh >= 0 ? CH_COLORS[domCh] : '#ff00ff';
+
   // Neon waveform — magenta to cyan
   const grad = visCtx.createLinearGradient(0, 0, W, 0);
   grad.addColorStop(0,    '#ff00ff');
@@ -1837,8 +2096,8 @@ function drawVis() {
 
   // Glow pass (thick, blurry)
   visCtx.shadowBlur = 12;
-  visCtx.shadowColor = '#ff00ff';
-  visCtx.strokeStyle = 'rgba(255,0,255,0.4)';
+  visCtx.shadowColor = glowColor;
+  visCtx.strokeStyle = glowColor + '66';
   visCtx.lineWidth = 5;
   visCtx.beginPath();
   const sliceW = W / bufLen;
@@ -1999,12 +2258,36 @@ document.getElementById('btn-loop').addEventListener('click', () => {
   setStatus('LOOP: ' + (state.looping ? 'ON' : 'OFF'));
 });
 document.getElementById('btn-clear').addEventListener('click', () => {
-  if (!confirm('Clear all steps?')) return;
-  state.channels.forEach(ch => { ch.steps = Array(16).fill(null); });
-  stopPlaying();
+  if (!confirm(`Clear pattern ${PATTERN_NAMES[state.currentPattern]}?`)) return;
+  state.patterns[state.currentPattern].forEach(arr => arr.fill(null));
   buildUI();
-  setStatus('CLEARED.');
+  setStatus('PATTERN ' + PATTERN_NAMES[state.currentPattern] + ' CLEARED.');
 });
+
+// Pattern / song controls
+document.getElementById('pat-copy').addEventListener('click', copyPatternToNext);
+document.getElementById('song-toggle').addEventListener('click', () => {
+  state.songMode = !state.songMode;
+  renderPatternRow();
+  setStatus('SONG MODE: ' + (state.songMode ? 'ON — PLAYS CHAIN' : 'OFF'));
+});
+document.getElementById('chain-add').addEventListener('click', () => {
+  if (state.chain.length >= 16) { setStatus('CHAIN FULL.'); return; }
+  state.chain.push(state.currentPattern);
+  renderPatternRow();
+  beep(880, 0.04, 0.05);
+});
+document.getElementById('chain-clear').addEventListener('click', () => {
+  state.chain = [state.currentPattern];
+  renderPatternRow();
+  setStatus('CHAIN RESET.');
+});
+document.getElementById('arp-toggle').addEventListener('click', () => {
+  state.arpOn = !state.arpOn;
+  renderPatternRow();
+  setStatus('PULSE ARP: ' + (state.arpOn ? 'ON' : 'OFF'));
+});
+document.getElementById('btn-demo').addEventListener('click', loadDemo);
 
 document.getElementById('bpm-up').addEventListener('click', () => {
   state.bpm = Math.min(240, state.bpm + 5);
@@ -2073,9 +2356,16 @@ document.getElementById('scale-name-btn').addEventListener('click', () => {
   setStatus('SCALE: ' + state.scale);
 });
 
+// QWERTY piano: Z-row plays the base octave chromatically
+const PIANO_KEYS = {
+  KeyZ:'C', KeyS:'C#', KeyX:'D', KeyD:'D#', KeyC:'E', KeyV:'F',
+  KeyG:'F#', KeyB:'G', KeyH:'G#', KeyN:'A', KeyJ:'A#', KeyM:'B',
+};
+
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
+  if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
   if (e.code === 'Space') {
     e.preventDefault();
     if (state.playing) stopPlaying(); else { audioCtx.resume(); startPlaying(); }
@@ -2087,7 +2377,27 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyT') tapTempo();
   if (e.code === 'KeyR') randomFill();
   if (['Digit1','Digit2','Digit3','Digit4'].includes(e.code)) {
-    selectChannel(parseInt(e.code.replace('Digit','')) - 1);
+    const n = parseInt(e.code.replace('Digit','')) - 1;
+    if (e.shiftKey) { setPattern(n); setStatus('PATTERN: ' + PATTERN_NAMES[n]); }
+    else selectChannel(n);
+  }
+  // Piano keys — select the note and preview it on the current channel
+  if (PIANO_KEYS[e.code]) {
+    const n = PIANO_KEYS[e.code];
+    state.selectedNote = n;
+    state.selectedKeyOctave = state.selectedOctave;
+    buildKeyboard();
+    updateNoteDisplay();
+    audioCtx.resume();
+    playNote(state.selectedChannel, n, state.selectedKeyOctave);
+    if (state.selectedStepIdx !== null) {
+      const { ch, step } = state.selectedStepIdx;
+      if (state.channels[ch].steps[step]) {
+        state.channels[ch].steps[step].note = n;
+        state.channels[ch].steps[step].octave = state.selectedKeyOctave;
+        renderStep(ch, step);
+      }
+    }
   }
 });
 

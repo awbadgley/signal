@@ -930,11 +930,7 @@
 
   <!-- Marquee -->
   <div id="marquee">
-    <span id="marquee-inner">
-      ★ VEKTR ★ &nbsp;&nbsp;&nbsp; LEAD · PULSE · BASS · DRUM &nbsp;&nbsp;&nbsp;
-      ★ CLICK STEPS · PRESS PLAY · TAP TEMPO · SHARE YOUR PATTERN &nbsp;&nbsp;&nbsp;
-      ★ VEKTR ★ &nbsp;&nbsp;&nbsp; STEP SEQUENCER &nbsp;&nbsp;&nbsp;
-    </span>
+    <span id="marquee-inner">★ VEKTR ★ &nbsp; STEP SEQUENCER ★</span>
   </div>
 
   <!-- Screen bezel -->
@@ -2611,6 +2607,43 @@ document.addEventListener('keydown', e => {
 
 // Loop button starts active
 document.getElementById('btn-loop').classList.add('active');
+
+// ── Dynamic marquee ───────────────────────────────────────────────────────────
+// Playing: live session readout. Stopped: rotating tips. Idle: attract hype.
+const MARQUEE_TIPS = [
+  'SHIFT-CLICK A STEP FOR ACCENTS',
+  'Z–M ROW PLAYS THE KEYBOARD',
+  'SHIFT+1-4 SWITCHES PATTERNS',
+  'RIGHT-CLICK A CHANNEL NAME TO MUTE IT',
+  'TURN ON SONG MODE TO CHAIN PATTERNS',
+  'ARP MAKES THE PULSE CHANNEL SHIMMER',
+  'PRESS T TO TAP TEMPO · R FOR RANDOM FILL',
+  'SHARE COPIES YOUR WHOLE SONG AS A URL',
+];
+let marqueeTip = 0;
+
+function marqueeText() {
+  if (document.body.classList.contains('attract')) {
+    return '★ VEKTR ★ THE ULTIMATE SOUND MACHINE ★ PRESS ANY KEY ★';
+  }
+  if (state.playing) {
+    let s = `★ VEKTR ★   ${state.bpm} BPM · SWING ${Math.round(state.swing * 100)}% · ${state.scaleRoot} ${state.scale}`;
+    if (state.songMode && state.chain.length > 1) {
+      s += ' · CHAIN ' + state.chain.map(p => PATTERN_NAMES[p]).join(' ');
+    } else {
+      s += ' · PATTERN ' + PATTERN_NAMES[state.currentPattern];
+    }
+    if (state.arpOn) s += ' · ARP ON';
+    return s + ' ★';
+  }
+  const tip = MARQUEE_TIPS[marqueeTip++ % MARQUEE_TIPS.length];
+  return `★ VEKTR ★   ${tip} ★`;
+}
+
+const marqueeInner = document.getElementById('marquee-inner');
+marqueeInner.addEventListener('animationiteration', () => {
+  marqueeInner.textContent = marqueeText();
+});
 
 // ── Boot Screen — CRT power-on ────────────────────────────────────────────────
 const bootEl = document.getElementById('boot');
